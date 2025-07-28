@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Montserrat } from "next/font/google";
+import { Geist, Geist_Mono, Montserrat, Inter } from "next/font/google";
 import "./globals.css";
+import Sidebar from "@/components/Sidebar";
+import Header from "@/components/Header";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -14,6 +16,11 @@ const geistMono = Geist_Mono({
 
 const montserrat = Montserrat({
   variable: "--font-montserrat",
+  subsets: ["latin"],
+  weight: ["100", "200", "300", "400", "500", "600", "700", "800", "900"],
+});
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
   weight: ["100", "200", "300", "400", "500", "600", "700", "800", "900"],
 });
@@ -31,7 +38,15 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body style={montserrat.style} className={` antialiased`}>
-        {children}
+        <div className="w-full gap-[40px] flex h-screen ">
+          <div className="hidden lg:flex  lg:w-[20%] flex-col">
+            <Sidebar />
+          </div>
+          <div className="m-4   flex flex-col flex-1">
+            <Header />
+            {children}
+          </div>
+        </div>
       </body>
     </html>
   );
