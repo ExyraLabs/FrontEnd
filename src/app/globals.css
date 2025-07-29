@@ -39,8 +39,8 @@
 @theme {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --color-primary: #E36640;
-  /* --color-primary: #5E4DFD; */
+  /* --color-primary: #E36640; */
+  --color-primary: #5E4DFD;
   --color-appGray: #303131;
   --color-appLight: #CEDBCE;
   --color-appDark: #1E1F1F;

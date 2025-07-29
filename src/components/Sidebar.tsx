@@ -13,6 +13,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
       imgSrc: "/icons/searchs.svg",
       width: 32,
       height: 32,
+      href: "/search",
       icon: (
         <svg
           width="24"
@@ -35,6 +36,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
       name: "Explore Agents",
       imgSrc: "/icons/explore.svg",
       width: 32,
+      href: "/explore",
       height: 32,
       icon: (
         <svg
@@ -57,6 +59,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
       imgSrc: "/icons/saved.svg",
       width: 32,
       height: 32,
+      href: "/saved",
       icon: (
         <svg
           width="24"
@@ -77,6 +80,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
       imgSrc: "/icons/reward.min.svg",
       width: 32,
       height: 32,
+      href: "/rewards",
       icon: (
         <svg
           width="24"
@@ -103,6 +107,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
       imgSrc: "/icons/history.min.svg",
       width: 32,
       height: 32,
+      href: "/history",
       icon: (
         <svg
           width="24"
@@ -258,9 +263,12 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
           <nav className="mb-3 lg:mb-6">
             <ul className="space-y-3">
               {navItems.map((item, index) => (
-                <li
-                  key={index}
+                // <button key={index} onClick={onClose}>
+                <Link
                   className="flex py-1 items-center gap-2 rounded-lg hover:bg-gray-100 mr-2 cursor-pointer group"
+                  href={item.href}
+                  onClick={onClose}
+                  key={index}
                 >
                   <div className="w-8 h-8 flex items-center justify-center group-hover:text-appGray [&_svg_*]:group-hover:stroke-appGray [&_svg_path]:group-hover:fill-appGray">
                     {item.icon}
@@ -268,7 +276,8 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                   <span className="text-sm font-medium group-hover:text-appGray">
                     {item.name}
                   </span>
-                </li>
+                </Link>
+                // </button>
               ))}
             </ul>
           </nav>
@@ -289,19 +298,37 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                 >
                   <defs>
                     <linearGradient
+                      suppressHydrationWarning
                       id={gradientId}
                       x1="0%"
                       y1="0%"
                       x2="0%"
                       y2="100%"
                     >
-                      <stop offset="0%" stopColor="#ff6b35" stopOpacity="0" />
-                      <stop offset="15%" stopColor="#ff6b35" stopOpacity="1" />
-                      <stop offset="85%" stopColor="#ff6b35" stopOpacity="1" />
-                      <stop offset="100%" stopColor="#ff6b35" stopOpacity="0" />
+                      <stop
+                        offset="0%"
+                        stopColor="var(--color-primary)"
+                        stopOpacity="0"
+                      />
+                      <stop
+                        offset="15%"
+                        stopColor="var(--color-primary)"
+                        stopOpacity="1"
+                      />
+                      <stop
+                        offset="85%"
+                        stopColor="var(--color-primary)"
+                        stopOpacity="1"
+                      />
+                      <stop
+                        offset="100%"
+                        stopColor="var(--color-primary)"
+                        stopOpacity="0"
+                      />
                     </linearGradient>
                   </defs>
                   <rect
+                    suppressHydrationWarning
                     x="0"
                     y="0"
                     width="2"

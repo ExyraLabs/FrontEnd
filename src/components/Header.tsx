@@ -12,7 +12,7 @@ const Header = () => {
 
   return (
     <>
-      <div className="flex justify-start items-center lg:px-4 py-3">
+      <div className="flex justify-start items-center px-4 py-3 ">
         {/* Hamburger menu for mobile */}
         <button
           className="md:hidden mr-3 focus:outline-none"

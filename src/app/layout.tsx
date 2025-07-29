@@ -37,12 +37,15 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body style={montserrat.style} className={` antialiased`}>
-        <div className="w-full gap-[40px] flex h-screen ">
+      <body
+        //  style={montserrat.style}
+        className={` antialiased`}
+      >
+        <div className="w-full gap-[20px] flex h-screen ">
           <div className="hidden lg:flex  lg:w-[20%] flex-col">
             <Sidebar />
           </div>
-          <div className="m-4   flex flex-col flex-1">
+          <div className="flex  flex-col flex-1">
             <Header />
             {children}
           </div>

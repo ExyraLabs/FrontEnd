@@ -36,11 +36,68 @@ const DefiOptions = [
 const ChatSection = () => {
   const [showDefiOptions, setShowDefiOptions] = React.useState(false);
   return (
-    <div className=" flex-1  relative flex flex-col">
+    <div className=" flex-1 px-4  relative flex flex-col">
       <div className=" flex flex-col justify-center   flex-1">
-        <div className="flex items-center justify-center lg:justify-start  gap-[9px] ">
-          <Image src={"/icons/hello.svg"} alt="hello" width={33} height={31} />
-          <h5 className="bg-gradient-to-r from-[#F85E2E] via-[#FB9B7E]/90 to-[#FF5F2E]  text-transparent bg-clip-text text-[22px] lg:text-[32px] font-medium">
+        <div className="flex text-primary items-center justify-center lg:justify-start  gap-[9px] ">
+          <svg
+            width="33"
+            height="32"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <g filter="url(#prefix__filter0_d_3300_1965)">
+              <path
+                d="M25 11.991c-4.693 0-8.491 3.816-8.491 8.509 0-4.693-3.816-8.509-8.509-8.509 4.693 0 8.509-3.798 8.509-8.491A8.486 8.486 0 0025 11.991z"
+                fill="currentColor"
+              />
+              <path
+                d="M25 11.991c-4.693 0-8.491 3.816-8.491 8.509 0-4.693-3.816-8.509-8.509-8.509 4.693 0 8.509-3.798 8.509-8.491A8.486 8.486 0 0025 11.991z"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </g>
+            <rect
+              x="14"
+              y="24.5"
+              width="6"
+              height="6"
+              rx="3"
+              fill="currentColor"
+            />
+            <defs>
+              <filter
+                id="prefix__filter0_d_3300_1965"
+                x="3.5"
+                y="3"
+                width="26"
+                height="26"
+                filterUnits="userSpaceOnUse"
+                colorInterpolationFilters="sRGB"
+              >
+                <feFlood floodOpacity="0" result="BackgroundImageFix" />
+                <feColorMatrix
+                  in="SourceAlpha"
+                  values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0"
+                  result="hardAlpha"
+                />
+                <feOffset dy="4" />
+                <feGaussianBlur stdDeviation="2" />
+                <feComposite in2="hardAlpha" operator="out" />
+                <feColorMatrix values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.25 0" />
+                <feBlend
+                  in2="BackgroundImageFix"
+                  result="effect1_dropShadow_3300_1965"
+                />
+                <feBlend
+                  in="SourceGraphic"
+                  in2="effect1_dropShadow_3300_1965"
+                  result="shape"
+                />
+              </filter>
+            </defs>
+          </svg>
+          <h5 className="bg-gradient-to-r from-[#4F3CFF] via-[#7EA1FB]/90 to-primary  text-transparent bg-clip-text text-[22px] lg:text-[32px] font-medium">
             Hello, how can I help?
           </h5>
         </div>
@@ -151,7 +208,7 @@ const ChatSection = () => {
                     </button>
                     {/* Tooltip */}
                     <div className="absolute bottom-[120%] right-1/2  translate-x-1/2 z-20 hidden group-hover:flex group-focus-within:flex flex-col items-center">
-                      <div className="bg-[#282A2E]  -translate-x-[30%] text-[#d9d9d9] text-sm rounded-[12px] px-8 py-6 shadow-lg w-[342px] text-center font-medium whitespace-pre-line">
+                      <div className="bg-[#282A2E]  -translate-x-[30%] text-[#d9d9d9] text-xs lg:text-sm rounded-[12px] px-4 lg:px-8 py-3 lg:py-6 shadow-lg w-[250px] lg:w-[342px] text-center font-medium whitespace-pre-line">
                         Daily message limit: 30 messages per wallet.Resets daily
                         at midnight UTC
                       </div>
@@ -168,7 +225,7 @@ const ChatSection = () => {
                     </div>
                   </div>
                 </div>
-                <div className="bg-[#F39C82] w-[32px] h-[32px] lg:w-[42px] lg:h-[42px] rounded-full flex justify-center items-center">
+                <div className="bg-[#A9A0FF] w-[32px] h-[32px] lg:w-[42px] lg:h-[42px] rounded-full flex justify-center items-center">
                   <div className="relative w-[22px] lg:w-[24px] h-[22px] lg:h-[24px]">
                     <Image
                       src={"/icons/arrow-right.svg"}
@@ -183,7 +240,7 @@ const ChatSection = () => {
           </div>
         </div>
       </div>
-      <button className="flex absolute bottom-5 right-5  items-center gap-2 border-[#474848] border bg-primary lg:w-[251px] w-[40px] h-[40px] justify-center hover:bg-[#d94d32] text-white cursor-pointer rounded-full lg:rounded-[24px] transition-colors">
+      <button className="flex absolute bottom-5 right-5  items-center gap-2 border-[#474848] border bg-primary lg:w-[251px] w-[40px] h-[40px] justify-center hover:bg-[#A9A0FF] text-white cursor-pointer rounded-full lg:rounded-[24px] transition-colors">
         <Image src={"/icons/star.svg"} alt="reward" width={20} height={20} />
         <span className="hidden lg:flex">Gain Recommendation</span>
       </button>
