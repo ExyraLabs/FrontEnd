@@ -1,5 +1,10 @@
 import Image from "next/image";
-import React from "react";
+import React, { useState } from "react";
+import Modal from "./Modal";
+import { useAppKit, useAppKitAccount } from "@reown/appkit/react";
+import { useChatRoomsMessages } from "../hooks/useChatRoomsMessages";
+import { useRouter } from "next/navigation";
+import { TextMessage, MessageRole } from "@copilotkit/runtime-client-gql";
 
 const examples = [
   "How can I get started?",
@@ -34,9 +39,106 @@ const DefiOptions = [
   },
 ];
 const ChatSection = () => {
-  const [showDefiOptions, setShowDefiOptions] = React.useState(false);
+  const [showDefiOptions, setShowDefiOptions] = useState(false);
+  const { address } = useAppKitAccount();
+  const [showModal, setShowModal] = useState(!false);
+  const { open } = useAppKit();
+
+  const handleConnectWallet = () => {
+    // TODO: Implement wallet connection logic
+    open();
+    console.log("Connect wallet clicked");
+  };
+
+  const { addMessage, loadChatRooms } = useChatRoomsMessages();
+  const router = useRouter();
+  const [inputValue, setInputValue] = useState("");
+
+  // Helper to generate a uuid (RFC4122 v4)
+  function generateUUID() {
+    return [1, 1, 1, 1, 1]
+      .map(() =>
+        Math.floor((1 + Math.random()) * 0x10000)
+          .toString(16)
+          .substring(1)
+      )
+      .join("-")
+      .replace(/-/g, "");
+  }
+
+  const handleSendMessage = () => {
+    const prompt = inputValue.trim();
+    if (!prompt) return;
+    let chatId = generateUUID();
+    const chatRooms = loadChatRooms();
+    // Ensure unique chatId
+    while (chatRooms[chatId]) {
+      chatId = generateUUID();
+    }
+    // Create message object using TextMessage constructor
+    const message = new TextMessage({
+      id: generateUUID(),
+      role: MessageRole.User,
+      content: prompt,
+      createdAt: new Date().toISOString(),
+    });
+    // Add message to new chatroom
+    addMessage(chatId, message);
+    setInputValue("");
+    // Switch route to /chat/[id]
+    router.push(`/chat/${chatId}`);
+  };
   return (
     <div className=" flex-1 px-4  relative flex flex-col">
+      <Modal isOpen={showModal} onClose={() => setShowModal(false)}>
+        <div className="w-[295px] flex flex-col gap-3 items-center justify-center h-[195px] rounded-[16px] bg-[#212121]">
+          <div className="w-[49px] h-[49px] relative flex items-center justify-center">
+            <span className="text-primary absolute top-0.5 -right-0.5">
+              <svg
+                width="13"
+                height="13"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M12 6.494c-3.037 0-5.494 2.47-5.494 5.506A5.51 5.51 0 001 6.494c3.037 0 5.506-2.457 5.506-5.494A5.491 5.491 0 0012 6.494z"
+                  fill="currentColor"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </span>
+            <Image src={"/icons/wallet-pri.svg"} alt="wallet" fill />
+          </div>
+          <p className="text-[#D9D9D9] text-sm text-center">
+            Connect your wallet to get personalized gain Recommendations
+          </p>
+          <button
+            onClick={handleConnectWallet}
+            className="flex items-center gap-1 lg:gap-2 bg-primary px-3 lg:h-[42px] py-1 justify-center lg:w-auto hover:bg-primary/70 text-white cursor-pointer  rounded-full transition-colors"
+          >
+            {/* Wallet Icon */}
+            <Image
+              src="/icons/wallet.svg"
+              alt="Wallet Icon"
+              width={20}
+              height={20}
+            />
+
+            <span className="hidden lg:flex text-sm tracking-tight">
+              {address
+                ? address.slice(0, 6) + "..." + address.slice(-4)
+                : "Connect Wallet"}
+            </span>
+            <span className="text-xs flex lg:hidden">
+              {address
+                ? address.slice(0, 4) + "..." + address.slice(-4)
+                : "Connect"}
+            </span>
+          </button>
+        </div>
+      </Modal>
       <div className=" flex flex-col justify-center   flex-1">
         <div className="flex text-primary items-center justify-center lg:justify-start  gap-[9px] ">
           <svg
@@ -102,11 +204,11 @@ const ChatSection = () => {
           </h5>
         </div>
         <div className="flex   mt-[50px] flex-col">
-          <div className=" flex lg:justify-start gap-x-2 gap-y-4  justify-center  flex-wrap ">
+          <div className=" flex  lg:justify-start gap-x-2 gap-y-2  justify-center  flex-wrap ">
             {examples.map((example, index) => (
               <button
                 key={index}
-                className="bg-[#303131] min-w-max rounded-[14px] text-white px-2.5 lg:px-4 h-[31px] text-[12px] lg:text-xs font-medium lg:mr-2 mb-2 hover:bg-[#d94d32]/70 transition-colors cursor-pointer"
+                className="bg-[#303131] min-w-max rounded-[14px] text-white px-2.5 lg:px-4 h-[31px] text-[12px] lg:text-xs font-medium lg:mr-2 mb-2 hover:bg-primary/70 duration-500 transition-colors cursor-pointer"
                 onClick={() => {
                   // Handle example click
                   console.log(`Example clicked: ${example}`);
@@ -116,10 +218,18 @@ const ChatSection = () => {
               </button>
             ))}
           </div>
-          <div className="bg-[#303131] mt-[56px] lg:mt-[32px] w-full lg:w-[90%] rounded-[24px] p-5">
+          <div className="bg-[#303131] w-full mt-5 lg:mt-1 lg:w-[90%] rounded-[24px] p-5">
             <textarea
               className="w-full min-h-[80px] bg-transparent text-white placeholder:text-[#DAD0D0] font-medium border-none focus:outline-none resize-none"
               placeholder="Ask anything ..."
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSendMessage();
+                }
+              }}
             ></textarea>
             <div className=" flex justify-between items-center  ">
               <div className="h-[41px] flex items-center gap-3 ">
@@ -161,14 +271,24 @@ const ChatSection = () => {
                       ))}
                     </div>
                   )}
-                  <Image
-                    src={
-                      showDefiOptions ? "icons/defi-2.svg" : "/icons/defi.svg"
-                    }
-                    alt="reward"
-                    width={18}
-                    height={18}
-                  />
+                  <span
+                    className={`${
+                      showDefiOptions ? "text-primary" : "text-white"
+                    }`}
+                  >
+                    <svg
+                      width="20"
+                      height="21"
+                      fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path
+                        d="M16.5 2.5a.5.5 0 01.5.5v.5h.5a.5.5 0 010 1H17V5a.5.5 0 01-1 0v-.5h-.5a.5.5 0 010-1h.5V3a.5.5 0 01.5-.5zm-13 13a.5.5 0 01.5.5v.5h.5a.5.5 0 010 1H4v.5a.5.5 0 01-1 0v-.5h-.5a.5.5 0 010-1H3V16a.5.5 0 01.5-.5zm4.001-13c-.65 0-1.126.513-1.239 1.058a4.15 4.15 0 01-1.115 2.089c-.714.715-1.54 1-2.087 1.114-.546.113-1.06.59-1.06 1.241.001.65.514 1.124 1.059 1.237a4.134 4.134 0 012.087 1.114 4.156 4.156 0 011.115 2.09c.114.543.589 1.057 1.239 1.057.65 0 1.126-.514 1.24-1.059a4.13 4.13 0 011.113-2.087 4.14 4.14 0 012.088-1.115C12.487 9.126 13 8.651 13 8c0-.65-.513-1.126-1.059-1.239a4.14 4.14 0 01-2.087-1.114A4.15 4.15 0 018.74 3.558C8.627 3.013 8.151 2.5 7.501 2.5zM7 15.5v-1.057a2.1 2.1 0 001 0V15.5a2 2 0 002 2h5a2 2 0 002-2v-5a2 2 0 00-2-2h-1.058a2.1 2.1 0 000-1H15a3 3 0 013 3v5a3 3 0 01-3 3h-5a3 3 0 01-3-3zm3-1.5a.5.5 0 01.5-.5h3a.5.5 0 010 1h-3a.5.5 0 01-.5-.5zm.5-2.5a.5.5 0 000 1H15a.5.5 0 000-1h-4.5z"
+                        fill="currentColor"
+                      />
+                    </svg>
+                  </span>
+
                   <span className="text-sm hidden lg:flex">Defi Execution</span>
                   {/* Dropdown Arrow */}
                   <Image
@@ -225,7 +345,10 @@ const ChatSection = () => {
                     </div>
                   </div>
                 </div>
-                <div className="bg-[#A9A0FF] w-[32px] h-[32px] lg:w-[42px] lg:h-[42px] rounded-full flex justify-center items-center">
+                <button
+                  onClick={handleSendMessage}
+                  className="bg-[#A9A0FF] cursor-pointer active:scale-90 hover:bg-primary duration-500 w-[32px] h-[32px] lg:w-[42px] lg:h-[42px] rounded-full flex justify-center items-center"
+                >
                   <div className="relative w-[22px] lg:w-[24px] h-[22px] lg:h-[24px]">
                     <Image
                       src={"/icons/arrow-right.svg"}
@@ -234,7 +357,7 @@ const ChatSection = () => {
                       height={24}
                     />
                   </div>
-                </div>
+                </button>
               </div>
             </div>
           </div>

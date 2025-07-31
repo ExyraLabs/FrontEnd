@@ -1,10 +1,13 @@
 "use client";
+import { useAppKit, useAppKitAccount } from "@reown/appkit/react";
 import Image from "next/image";
 import React, { useState } from "react";
 
 const WalletConnector = () => {
   const [selectedLanguage, setSelectedLanguage] = useState("Eng");
   const [isLanguageDropdownOpen, setIsLanguageDropdownOpen] = useState(false);
+  const { address } = useAppKitAccount();
+  const { open } = useAppKit();
 
   const languages = [
     { code: "Eng", name: "English" },
@@ -15,6 +18,7 @@ const WalletConnector = () => {
 
   const handleConnectWallet = () => {
     // TODO: Implement wallet connection logic
+    open();
     console.log("Connect wallet clicked");
   };
 
@@ -81,7 +85,7 @@ const WalletConnector = () => {
       {/* Connect Wallet Button */}
       <button
         onClick={handleConnectWallet}
-        className="flex items-center gap-1 lg:gap-2 bg-primary px-3 lg:px-5 lg:h-[42px] py-1 justify-center lg:w-auto hover:bg-[#d94d32] text-white cursor-pointer  rounded-full transition-colors"
+        className="flex items-center gap-1 lg:gap-2 bg-primary px-3 lg:px-5 lg:h-[42px] py-1 justify-center lg:w-auto hover:bg-primary/70 text-white cursor-pointer  rounded-full transition-colors"
       >
         {/* Wallet Icon */}
         <Image
@@ -91,8 +95,16 @@ const WalletConnector = () => {
           height={20}
         />
 
-        <span className="hidden lg:flex text-base">Connect Wallet</span>
-        <span className="text-xs flex lg:hidden">Connect</span>
+        <span className="hidden lg:flex text-base tracking-tight">
+          {address
+            ? address.slice(0, 6) + "..." + address.slice(-4)
+            : "Connect Wallet"}
+        </span>
+        <span className="text-xs flex lg:hidden">
+          {address
+            ? address.slice(0, 4) + "..." + address.slice(-4)
+            : "Connect"}
+        </span>
       </button>
     </div>
   );

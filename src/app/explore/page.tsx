@@ -9,7 +9,7 @@ const TABS = [
   "Execution",
   "Research",
   "Swap",
-  "Buy PT/VT",
+  // "Buy PT/VT",
   "Lend",
   "Bridge",
   "Provide LP",
@@ -37,7 +37,7 @@ const AGENT_CARDS = [
       "Participate in DeFi with stETH",
     ],
     prompts: [
-      "How can I stake my ETH?",
+      // "How can I stake my ETH?",
       "How can I participate in DeFi with stETH?",
       "Stake $4 worth of ETH for me",
     ],
@@ -48,12 +48,12 @@ const AGENT_CARDS = [
     title: "Uniswap",
     subtitle: "Decentralized exchange for swapping tokens",
     features: [
-      "Swap any ERC-20 token instantly",
+      // "Swap any ERC-20 token instantly",
       "Provide liquidity and earn fees",
       "Access deep liquidity pools",
     ],
     prompts: [
-      "Swap 10 USDC to ETH",
+      // "Swap 10 USDC to ETH",
       "Show me top pools on Uniswap",
       "Provide liquidity for ETH/USDC",
     ],
@@ -69,7 +69,7 @@ const AGENT_CARDS = [
       "Earn rewards by providing liquidity",
     ],
     prompts: [
-      "Swap 5 BNB to USDT on BSC",
+      // "Swap 5 BNB to USDT on BSC",
       "Show KyberSwap rates for ETH/USDT",
       "Provide liquidity for MATIC/USDT",
     ],

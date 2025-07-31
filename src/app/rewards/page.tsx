@@ -64,11 +64,11 @@ const Explore = () => {
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
 
   return (
-    <div className="flex  flex-1 gap-8 px-4 overflow-y-scroll w-full">
-      <div className="w-[60%]">
-        <div className="flex justify-between items-center">
+    <div className="flex  flex-col lg:flex-row flex-1 gap-8 px-4 overflow-y-scroll w-full">
+      <div className="lg:w-[60%]">
+        <div className="flex justify-between mb-4 mt-2 items-center">
           {/* Page Title */}
-          <h1 className="text-[28px] font-bold text-white mb-4 mt-2">
+          <h1 className=" text-[24px] lg:text-[28px] font-bold text-white">
             Rewards
           </h1>
           <p className="text-sm bg-[#262727] rounded-[17px] text-primary px-6 py-2.5 ">
@@ -84,10 +84,17 @@ const Explore = () => {
         <div className="flex items-center">
           <div className="relative  flex flex-col items-center w-full md:w-[180px]">
             <button
-              onClick={() => setShowTierDropdown((prev) => !prev)}
+              onClick={() => {
+                setShowTierDropdown((prev) => !prev);
+                if (showCategoryDropdown) {
+                  setShowCategoryDropdown(false);
+                }
+              }}
               className="flex items-center justify-between bg-[#262727] border border-[#3A3B3B] h-[44px] w-full text-[#F5F7F7] px-4 rounded-[40px] text-sm focus:outline-none hover:bg-[#3A3B3B] duration-300 cursor-pointer relative"
             >
-              <span className="flex items-center gap-2">{selectedTier}</span>
+              <span className="flex  text-[10px] lg:text-sm items-center gap-2">
+                {selectedTier}
+              </span>
               <Image
                 src={"/icons/arrow-left.svg"}
                 alt="arrow"
@@ -149,10 +156,15 @@ const Explore = () => {
           </div>
           <div className="relative ml-4  flex flex-col items-center w-full md:w-[180px]">
             <button
-              onClick={() => setShowCategoryDropdown((prev) => !prev)}
+              onClick={() => {
+                setShowCategoryDropdown((prev) => !prev);
+                if (showTierDropdown) {
+                  setShowTierDropdown(false);
+                }
+              }}
               className="flex items-center justify-between bg-[#262727] border border-[#3A3B3B] h-[44px] w-full text-[#F5F7F7] px-4 rounded-[40px] text-sm focus:outline-none hover:bg-[#3A3B3B] duration-300 cursor-pointer relative"
             >
-              <span className="flex items-center gap-2">
+              <span className="flex text-[10px] lg:text-sm items-center gap-2">
                 {selectedCategory}
               </span>
               <Image
@@ -242,7 +254,7 @@ const Explore = () => {
                 return (
                   <div
                     key={badge}
-                    className="w-[140px] flex items-center justify-center relative h-[143px] rounded-2xl bg-[#262727] mt-2"
+                    className="w-[152px] lg:w-[140px] flex items-center justify-center relative h-[143px] rounded-2xl bg-[#262727] mt-2"
                   >
                     <Image
                       src={"/icons/lock.svg"}
@@ -282,7 +294,7 @@ const Explore = () => {
                 return (
                   <div
                     key={badge}
-                    className="w-[140px] flex items-center justify-center relative h-[143px] rounded-2xl bg-[#262727] mt-2"
+                    className="w-[152px] lg:w-[140px] flex items-center justify-center relative h-[143px] rounded-2xl bg-[#262727] mt-2"
                   >
                     <Image
                       src={"/icons/lock.svg"}
@@ -322,7 +334,7 @@ const Explore = () => {
                 return (
                   <div
                     key={badge}
-                    className="w-[140px] flex items-center justify-center relative h-[143px] rounded-2xl bg-[#262727] mt-2"
+                    className="w-[152px] lg:w-[140px] flex items-center justify-center relative h-[143px] rounded-2xl bg-[#262727] mt-2"
                   >
                     <Image
                       src={"/icons/lock.svg"}

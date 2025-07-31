@@ -1,5 +1,17 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useChatRoomsMessages } from "../hooks/useChatRoomsMessages";
+import { useState } from "react";
+import {
+  TextMessage,
+  ActionExecutionMessage,
+  ResultMessage,
+  Role,
+  Message,
+} from "@copilotkit/runtime-client-gql";
 
 interface SidebarProps {
   open?: boolean;
@@ -7,6 +19,7 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
+  const router = useRouter();
   const navItems = [
     {
       name: "Search",
@@ -33,7 +46,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
       ),
     },
     {
-      name: "Explore Agents",
+      name: "Discover Agents",
       imgSrc: "/icons/explore.svg",
       width: 32,
       href: "/explore",
@@ -102,71 +115,74 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
         </svg>
       ),
     },
-    {
-      name: "History",
-      imgSrc: "/icons/history.min.svg",
-      width: 32,
-      height: 32,
-      href: "/history",
-      icon: (
-        <svg
-          width="24"
-          height="24"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="6 6 28 28"
-        >
-          <g filter="url(#prefix__filter0_d_3308_4755)">
-            <path
-              fillRule="evenodd"
-              clipRule="evenodd"
-              d="M14.14 10.224c3.163-3.158 8.305-3.125 11.486.058 3.184 3.183 3.217 8.327.054 11.49-3.163 3.162-8.307 3.13-11.49-.054a8.174 8.174 0 01-2.332-6.9.625.625 0 111.24.17 6.923 6.923 0 001.975 5.847c2.704 2.703 7.057 2.72 9.724.053 2.665-2.666 2.65-7.019-.054-9.723-2.702-2.702-7.052-2.72-9.719-.057l.623.003a.624.624 0 11-.005 1.25l-2.122-.01a.625.625 0 01-.622-.623l-.01-2.12a.624.624 0 111.25-.006l.003.622zm5.767 1.817a.625.625 0 01.625.625v3.075l1.901 1.9a.626.626 0 11-.883.884l-2.267-2.267v-3.591a.625.625 0 01.625-.625"
-              fill="#fff"
-            />
-          </g>
-          <defs>
-            <filter
-              id="prefix__filter0_d_3308_4755"
-              x="0"
-              y="0"
-              width="39.769"
-              height="40"
-              filterUnits="userSpaceOnUse"
-              colorInterpolationFilters="sRGB"
-            >
-              <feFlood floodOpacity="0" result="BackgroundImageFix" />
-              <feColorMatrix
-                in="SourceAlpha"
-                values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0"
-                result="hardAlpha"
-              />
-              <feOffset dy="4" />
-              <feGaussianBlur stdDeviation="2" />
-              <feComposite in2="hardAlpha" operator="out" />
-              <feColorMatrix values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.15 0" />
-              <feBlend
-                in2="BackgroundImageFix"
-                result="effect1_dropShadow_3308_4755"
-              />
-              <feBlend
-                in="SourceGraphic"
-                in2="effect1_dropShadow_3308_4755"
-                result="shape"
-              />
-            </filter>
-          </defs>
-        </svg>
-      ),
-    },
+    // {
+    //   name: "History",
+    //   imgSrc: "/icons/history.min.svg",
+    //   width: 32,
+    //   height: 32,
+    //   href: "/history",
+    //   icon: (
+    //     <svg
+    //       width="24"
+    //       height="24"
+    //       fill="none"
+    //       xmlns="http://www.w3.org/2000/svg"
+    //       viewBox="6 6 28 28"
+    //     >
+    //       <g filter="url(#prefix__filter0_d_3308_4755)">
+    //         <path
+    //           fillRule="evenodd"
+    //           clipRule="evenodd"
+    //           d="M14.14 10.224c3.163-3.158 8.305-3.125 11.486.058 3.184 3.183 3.217 8.327.054 11.49-3.163 3.162-8.307 3.13-11.49-.054a8.174 8.174 0 01-2.332-6.9.625.625 0 111.24.17 6.923 6.923 0 001.975 5.847c2.704 2.703 7.057 2.72 9.724.053 2.665-2.666 2.65-7.019-.054-9.723-2.702-2.702-7.052-2.72-9.719-.057l.623.003a.624.624 0 11-.005 1.25l-2.122-.01a.625.625 0 01-.622-.623l-.01-2.12a.624.624 0 111.25-.006l.003.622zm5.767 1.817a.625.625 0 01.625.625v3.075l1.901 1.9a.626.626 0 11-.883.884l-2.267-2.267v-3.591a.625.625 0 01.625-.625"
+    //           fill="#fff"
+    //         />
+    //       </g>
+    //       <defs>
+    //         <filter
+    //           id="prefix__filter0_d_3308_4755"
+    //           x="0"
+    //           y="0"
+    //           width="39.769"
+    //           height="40"
+    //           filterUnits="userSpaceOnUse"
+    //           colorInterpolationFilters="sRGB"
+    //         >
+    //           <feFlood floodOpacity="0" result="BackgroundImageFix" />
+    //           <feColorMatrix
+    //             in="SourceAlpha"
+    //             values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0"
+    //             result="hardAlpha"
+    //           />
+    //           <feOffset dy="4" />
+    //           <feGaussianBlur stdDeviation="2" />
+    //           <feComposite in2="hardAlpha" operator="out" />
+    //           <feColorMatrix values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.15 0" />
+    //           <feBlend
+    //             in2="BackgroundImageFix"
+    //             result="effect1_dropShadow_3308_4755"
+    //           />
+    //           <feBlend
+    //             in="SourceGraphic"
+    //             in2="effect1_dropShadow_3308_4755"
+    //             result="shape"
+    //           />
+    //         </filter>
+    //       </defs>
+    //     </svg>
+    //   ),
+    // },
   ];
 
-  const chatHistory = [
-    "Amsterdam trip with ...",
-    "Amsterdam trip with ...",
-    "Amsterdam trip with ...",
-    "Amsterdam trip with ...",
-    "Amsterdam trip with ...",
-  ];
+  const { loadChatRooms, deleteChatRoom } = useChatRoomsMessages();
+  const [hoveredChatId, setHoveredChatId] = useState<string | null>(null);
+  const [refresh, setRefresh] = useState(0);
+  const chatRoomsObj = typeof window !== "undefined" ? loadChatRooms() : {};
+  const chatRooms = Object.entries(chatRoomsObj);
+
+  const handleDelete = (chatId: string) => {
+    deleteChatRoom(chatId);
+    setRefresh((r) => r + 1); // force re-render
+  };
 
   const socialLinks = [
     {
@@ -225,7 +241,15 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
             height={47}
             className="absolute top-4 left-[1px]"
           />
-          <button className="flex flex-1 justify-start px-5 items-center gap-3.5 min-h-[42px] rounded-[18px] bg-appDark">
+          <button
+            onClick={() => {
+              router.push("/");
+              if (onClose) {
+                onClose();
+              }
+            }}
+            className="flex cursor-pointer flex-1 justify-start px-5 items-center gap-3.5 min-h-[42px] rounded-[18px] bg-appDark"
+          >
             <Image
               src="/icons/edit.svg"
               alt="New"
@@ -283,9 +307,8 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
           </nav>
 
           {/* Chat History Section */}
-          <div className="relative  h-max  lg:mb-6 flex flex-col items-start py-2 pl-9">
+          <div className="relative h-max lg:mb-6 flex flex-col items-start py-2 pl-9">
             {/* Custom SVG Line with Rounded Ends */}
-            {/* Use a unique gradient id to avoid collision issues on mobile/hydration */}
             {(() => {
               const gradientId = `lineGradient-${Math.random()
                 .toString(36)
@@ -342,27 +365,101 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
             })()}
 
             <h3 className="text-[10px] text-[#B5B5B5] mb-3">Today</h3>
-            <ul className="hidden lg:flex flex-col gap-4">
-              {chatHistory.map((chat, index) => (
-                <li
-                  key={index}
-                  className="text-xs text-white cursor-pointer truncate"
-                >
-                  {chat}
-                </li>
-              ))}
+            <ul className="hidden lg:flex w-[85%] flex-col gap-4">
+              {chatRooms.length > 0 ? (
+                chatRooms.map(([chatId, messages]) => {
+                  const firstMsg: Message | null =
+                    messages.length > 0 ? messages[0] : null;
+                  let displayText = `Chat ${chatId}`;
+                  if (firstMsg) {
+                    if (
+                      firstMsg.type === "TextMessage" &&
+                      "content" in firstMsg
+                    ) {
+                      displayText = firstMsg.content as string;
+                    }
+                  }
+                  return (
+                    <li
+                      key={chatId}
+                      className="text-xs w-full text-white cursor-pointer truncate flex items-center duration-500 transition-all justify-between group"
+                      onClick={() => router.push(`/chat/${chatId}`)}
+                      onMouseEnter={() => setHoveredChatId(chatId)}
+                      onMouseLeave={() => setHoveredChatId(null)}
+                    >
+                      <span className=" truncate">{displayText}</span>
+                      {hoveredChatId === chatId && (
+                        <button
+                          className="duration-500 cursor-pointer hover:scale-125"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDelete(chatId);
+                          }}
+                          title="Delete chat"
+                        >
+                          <Image
+                            src="/icons/delete.svg"
+                            alt="Delete"
+                            width={14}
+                            height={14}
+                          />
+                        </button>
+                      )}
+                    </li>
+                  );
+                })
+              ) : (
+                <li className="text-xs text-gray-400">No chats yet.</li>
+              )}
             </ul>
             <ul className="flex lg:hidden flex-col gap-4">
-              {chatHistory.slice(0, 3).map((chat, index) => (
-                <li
-                  key={index}
-                  className="text-xs text-white cursor-pointer truncate"
-                >
-                  {chat}
-                </li>
-              ))}
+              {chatRooms.length > 0 ? (
+                chatRooms.slice(0, 3).map(([chatId, messages]) => {
+                  const firstMsg: Message | null =
+                    messages.length > 0 ? messages[0] : null;
+                  let displayText = `Chat ${chatId}`;
+                  if (firstMsg) {
+                    if (
+                      firstMsg.type === "TextMessage" &&
+                      "content" in firstMsg
+                    ) {
+                      displayText = firstMsg.content as string;
+                    }
+                  }
+                  return (
+                    <li
+                      key={chatId}
+                      className="text-xs text-white cursor-pointer truncate flex items-center group"
+                      onClick={() => router.push(`/chat/${chatId}`)}
+                      onMouseEnter={() => setHoveredChatId(chatId)}
+                      onMouseLeave={() => setHoveredChatId(null)}
+                    >
+                      <span className="flex-1 truncate">{displayText}</span>
+                      {hoveredChatId === chatId && (
+                        <button
+                          className=""
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDelete(chatId);
+                          }}
+                          title="Delete chat"
+                        >
+                          <Image
+                            src="/icons/delete.svg"
+                            alt="Delete"
+                            width={16}
+                            height={16}
+                          />
+                        </button>
+                      )}
+                    </li>
+                  );
+                })
+              ) : (
+                <li className="text-xs text-gray-400">No chats yet.</li>
+              )}
             </ul>
-            <button className="text-[10px] text-[#D9D9D9] hover:text-white mt-3  underline">
+            <button className="text-[10px] text-[#D9D9D9] hover:text-white mt-3 underline">
               See all
             </button>
           </div>
