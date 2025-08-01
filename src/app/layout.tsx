@@ -13,7 +13,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://https://cerebrum.exyra.ai"),
+  metadataBase: new URL("https://cerebrum.exyra.ai"),
 
   title: "The Engine Behind Autonomous Execution",
   description:
@@ -22,7 +22,7 @@ export const metadata: Metadata = {
     title: "The Engine Behind Autonomous Execution",
     description:
       "Exyra is a modular AI-native protocol designed to decode and automate Web3 finance. By leveraging autonomous logic layers called Insight Nodes, Exyra helps users identify, customize and act on blockchain-based financial strategies in real time.",
-    images: "https://https://cerebrum.exyra.ai/opengraph-image.png",
+    images: "https://cerebrum.exyra.ai/opengraph-image.png",
   },
 };
 
