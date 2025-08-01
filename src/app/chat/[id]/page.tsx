@@ -1,7 +1,8 @@
 "use client";
 import Modal from "@/components/Modal";
 import { useChatRoomsMessages } from "@/hooks/useChatRoomsMessages";
-import { useAppKit, useAppKitAccount } from "@reown/appkit/react";
+import { useSavedPrompts } from "@/hooks/useSavedPrompts";
+import { useAppKitAccount } from "@reown/appkit/react";
 import Image from "next/image";
 import { useParams } from "next/navigation";
 import React, { useEffect, useRef, useState } from "react";
@@ -31,37 +32,24 @@ const Page = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { address } = useAppKitAccount();
   const [showModal, setShowModal] = useState(!false);
-  const { open } = useAppKit();
   const params = useParams();
   const id = params.id as string;
-  const { getMessages, saveChatRoomMessages, loadChatRooms } =
-    useChatRoomsMessages();
+  const { getMessages, saveChatRoomMessages } = useChatRoomsMessages();
+  const { savePrompt, isPromptSaved, loadSavedPrompts, deletePromptByContent } =
+    useSavedPrompts();
+  const [savedPrompts, setSavedPrompts] = useState<Set<string>>(new Set());
   const messages = getMessages(id);
-  const {
-    visibleMessages,
-    appendMessage,
-    isLoading,
-    runChatCompletion,
-    deleteMessage,
-  } = useCopilotChat({
+  const { visibleMessages, appendMessage, isLoading } = useCopilotChat({
     id: id,
     initialMessages: messages,
   });
 
-  const { messages: contextMessages, setMessages } =
-    useCopilotMessagesContext();
+  console.log(loadSavedPrompts(), "SavedPrompts");
+  console.log(
+    `Chat ID: ${id}, Messages loaded: ${messages.length}, Visible messages: ${visibleMessages.length}`
+  );
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
-  const handleConnectWallet = () => {
-    // TODO: Implement wallet connection logic
-    open();
-    console.log("Connect wallet clicked");
-  };
-
-  const all = loadChatRooms();
+  const { setMessages } = useCopilotMessagesContext();
 
   // const handleSendMessage = () => {
   //   console.log(id, "Chat-Id");
@@ -77,14 +65,29 @@ const Page = () => {
     sendMessage(inputValue);
   };
 
-  const renderTextMessage = (
-    message: BaseMessageOutput,
-    index: number,
-    arr: BaseMessageOutput[]
-  ) => {
+  const renderTextMessage = (message: BaseMessageOutput, index: number) => {
     const textMessage = message as TextMessage;
     const isUser = textMessage.role === Role.User;
     const messageContent = textMessage.content || "";
+    const promptIsSaved = isUser && isPromptSaved(messageContent);
+    console.log(promptIsSaved, "Prompt Is Saved");
+
+    const handleSavePrompt = () => {
+      if (promptIsSaved) {
+        // Remove prompt from saved prompts
+        deletePromptByContent(messageContent);
+        setSavedPrompts((prev) => {
+          const newSet = new Set(prev);
+          newSet.delete(messageContent.trim());
+          return newSet;
+        });
+        console.log("Prompt removed from saved!");
+      } else {
+        savePrompt(messageContent);
+        setSavedPrompts((prev) => new Set([...prev, messageContent.trim()]));
+        console.log("Prompt saved!");
+      }
+    };
 
     return (
       <div
@@ -110,12 +113,19 @@ const Page = () => {
           }  flex items-center`}
         >
           {isUser && (
-            <button className="cursor-pointer">
+            <button
+              className={`cursor-pointer relative flex items-center justify-center hover:opacity-70 transition-opacity`}
+              onClick={handleSavePrompt}
+              title={promptIsSaved ? "Prompt already saved" : "Save prompt"}
+            >
+              {promptIsSaved && (
+                <div className="absolute bg-[#888] w-1 h-1 rounded-full" />
+              )}
               <Image
                 src={"/icons/save.svg"}
                 width={16}
                 height={16}
-                alt="saved"
+                alt="save"
               />
             </button>
           )}
@@ -129,19 +139,40 @@ const Page = () => {
   console.log(messages, "Visible Messages");
 
   useEffect(() => {
+    // Only run this effect when we first load a chat room or when we have exactly 1 message
     if (messages.length === 1) {
-      sendMessage((messages[0] as TextMessage).content);
+      const firstMessage = messages[0] as TextMessage;
+      if (firstMessage.role === Role.User) {
+        sendMessage(firstMessage.content);
+      }
     }
 
+    // Always sync the loaded messages to CopilotKit context
     setMessages(messages);
     //eslint-disable-next-line
-  }, [messages.length]);
+  }, [messages.length]); // Only depend on id changes, not messages.length
+
   useEffect(() => {
+    // Load saved prompts state on mount
+    const savedPromptsData = loadSavedPrompts();
+    const savedContents = new Set(
+      savedPromptsData.map((p) => p.content.trim())
+    );
+    setSavedPrompts(savedContents);
+  }, [loadSavedPrompts]);
+
+  useEffect(() => {
+    // Only save if we have messages and not currently loading
+    // Add a debounce to prevent too frequent saves
     if (!isLoading && visibleMessages.length > 0) {
-      saveChatRoomMessages(id, visibleMessages);
+      const saveTimeout = setTimeout(() => {
+        saveChatRoomMessages(id, visibleMessages);
+      }, 500); // Debounce saves by 500ms
+
+      return () => clearTimeout(saveTimeout);
     }
     //eslint-disable-next-line
-  }, [isLoading, visibleMessages.length]);
+  }, [isLoading, visibleMessages.length, id]);
 
   // useEffect(() => {
   //   scrollToBottom();
@@ -157,7 +188,7 @@ const Page = () => {
           const messageType = message?.type || message.constructor.name;
           // Render text messages (User and Assistant)
           if (messageType === "TextMessage" || (message as TextMessage).role) {
-            return renderTextMessage(message, idx, visibleMessages);
+            return renderTextMessage(message, idx);
           }
         })}
         <div ref={messagesEndRef} />

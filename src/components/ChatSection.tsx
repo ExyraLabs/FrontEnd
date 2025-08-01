@@ -41,7 +41,7 @@ const DefiOptions = [
 const ChatSection = () => {
   const [showDefiOptions, setShowDefiOptions] = useState(false);
   const { address } = useAppKitAccount();
-  const [showModal, setShowModal] = useState(!false);
+  const [showModal, setShowModal] = useState(false);
   const { open } = useAppKit();
 
   const handleConnectWallet = () => {
@@ -54,16 +54,16 @@ const ChatSection = () => {
   const router = useRouter();
   const [inputValue, setInputValue] = useState("");
 
-  // Helper to generate a uuid (RFC4122 v4)
+  // Helper to generate a proper uuid (RFC4122 v4)
   function generateUUID() {
-    return [1, 1, 1, 1, 1]
-      .map(() =>
-        Math.floor((1 + Math.random()) * 0x10000)
-          .toString(16)
-          .substring(1)
-      )
-      .join("-")
-      .replace(/-/g, "");
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(
+      /[xy]/g,
+      function (c) {
+        const r = (Math.random() * 16) | 0;
+        const v = c === "x" ? r : (r & 0x3) | 0x8;
+        return v.toString(16);
+      }
+    );
   }
 
   const handleSendMessage = () => {
@@ -233,7 +233,7 @@ const ChatSection = () => {
             ></textarea>
             <div className=" flex justify-between items-center  ">
               <div className="h-[41px] flex items-center gap-3 ">
-                <button className="flex items-center lg:gap-2 border-[#474848] border bg-[#282A2E] w-[48px] h-[48px] lg:h-full  lg:px-5 lg:w-[123px] rounded-full justify-center hover:bg-[#d94d32] text-white cursor-pointer lg:rounded-[24px] transition-colors">
+                {/* <button className="flex items-center lg:gap-2 border-[#474848] border bg-[#282A2E] w-[48px] h-[48px] lg:h-full  lg:px-5 lg:w-[123px] rounded-full justify-center hover:bg-[#d94d32] text-white cursor-pointer lg:rounded-[24px] transition-colors">
                   <Image
                     src={"/icons/rewards-white.svg"}
                     alt="reward"
@@ -242,7 +242,7 @@ const ChatSection = () => {
                     height={18}
                   />
                   <span className="text-sm hidden lg:flex">Rewards</span>
-                </button>
+                </button> */}
                 <button
                   onClick={() => setShowDefiOptions(!showDefiOptions)}
                   className={`flex items-center gap-2 border-[#474848] border bg-[#282A2E] h-full lg:px-5 w-[65px] lg:w-[197px] justify-center relative hover:border-primary text-white cursor-pointer rounded-[24px] ${
