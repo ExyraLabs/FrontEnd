@@ -1,13 +1,12 @@
 "use client";
 
-import { wagmiAdapter, projectId } from "@/config";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { createAppKit, useAppKit, useAppKitAccount } from "@reown/appkit/react";
-import { mainnet, arbitrum } from "@reown/appkit/networks";
-import React, { useState, type ReactNode } from "react";
-import { cookieToInitialState, WagmiProvider, type Config } from "wagmi";
+import { projectId, wagmiAdapter } from "@/config";
 import { CopilotKit } from "@copilotkit/react-core";
-import Modal from "../Modal";
+import { arbitrum, mainnet } from "@reown/appkit/networks";
+import { createAppKit } from "@reown/appkit/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { type ReactNode } from "react";
+import { cookieToInitialState, WagmiProvider, type Config } from "wagmi";
 
 // Set up queryClient
 const queryClient = new QueryClient();
@@ -62,7 +61,7 @@ function WalletProvider({
       initialState={initialState}
     >
       <QueryClientProvider client={queryClient}>
-        <CopilotKit publicApiKey={publicApiKey}>{children}</CopilotKit>
+        <CopilotKit runtimeUrl={runtimeUrl}>{children}</CopilotKit>
       </QueryClientProvider>
     </WagmiProvider>
   );

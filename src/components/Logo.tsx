@@ -1,5 +1,3 @@
-import Image from "next/image";
-
 const Logo = () => {
   return (
     <div className="flex mr-auto lg:bg-[#212121] rounded-[14px] py-[13px] pl-[17px] pr-[29px] items-center gap-2">

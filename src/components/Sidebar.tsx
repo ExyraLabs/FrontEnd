@@ -2,11 +2,13 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useChatRoomsMessages } from "../hooks/useChatRoomsMessages";
 import { useSavedPrompts, SavedPrompt } from "../hooks/useSavedPrompts";
 import { useState, useMemo } from "react";
 import { Message } from "@copilotkit/runtime-client-gql";
+import GradientLine from "./GradientLine";
+import { socialLinks } from "@/utils/constants";
 
 interface SidebarProps {
   open?: boolean;
@@ -15,6 +17,13 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
   const router = useRouter();
+  const pathname = usePathname();
+
+  // Extract current chat ID from pathname
+  const currentChatId = pathname?.startsWith("/chat/")
+    ? pathname.split("/chat/")[1]
+    : null;
+
   const navItems = [
     {
       name: "Search",
@@ -168,7 +177,8 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
     // },
   ];
 
-  const { loadChatRooms, deleteChatRoom } = useChatRoomsMessages();
+  const { loadChatRooms, deleteChatRoom, getChatTitle } =
+    useChatRoomsMessages();
   const { loadSavedPrompts, deletePrompt } = useSavedPrompts();
   const [hoveredChatId, setHoveredChatId] = useState<string | null>(null);
   const [hoveredPromptId, setHoveredPromptId] = useState<string | null>(null);
@@ -179,6 +189,20 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
   const [promptSearchQuery, setPromptSearchQuery] = useState("");
   const chatRoomsObj = typeof window !== "undefined" ? loadChatRooms() : {};
   const chatRooms = Object.entries(chatRoomsObj);
+
+  // Utility function to get the first message date from a chat room (chat creation time)
+  const getFirstMessageDate = (messages: Message[]): Date | null => {
+    if (messages.length === 0) return null;
+
+    // Find the message with the earliest createdAt timestamp (first message)
+    const firstMessage = messages.reduce((earliest, current) => {
+      const currentDate = new Date(current.createdAt);
+      const earliestDate = new Date(earliest.createdAt);
+      return currentDate < earliestDate ? current : earliest;
+    });
+
+    return new Date(firstMessage.createdAt);
+  };
 
   // Utility function to get the most recent message date from a chat room
   const getMostRecentMessageDate = (messages: Message[]): Date | null => {
@@ -218,6 +242,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
         const mostRecentDate = getMostRecentMessageDate(messages);
         if (!mostRecentDate) return;
 
+        // Group by most recent activity
         if (mostRecentDate >= today) {
           groups.today.push([chatId, messages]);
         } else if (mostRecentDate >= yesterday) {
@@ -229,13 +254,14 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
         }
       });
 
-      // Sort each group by most recent first
+      // Sort each group by chat creation time (first message) - most recent creation first
+      // This ensures stable ordering that doesn't change when you interact with chats
       Object.values(groups).forEach((group) => {
         group.sort(([, messagesA], [, messagesB]) => {
-          const dateA = getMostRecentMessageDate(messagesA);
-          const dateB = getMostRecentMessageDate(messagesB);
+          const dateA = getFirstMessageDate(messagesA);
+          const dateB = getFirstMessageDate(messagesB);
           if (!dateA || !dateB) return 0;
-          return dateB.getTime() - dateA.getTime();
+          return dateB.getTime() - dateA.getTime(); // Most recent chat creation first
         });
       });
 
@@ -300,11 +326,93 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
   const handleDelete = (chatId: string) => {
     deleteChatRoom(chatId);
     setRefresh((r) => r + 1); // force re-render
+    router.push("/");
   };
 
   const handleDeletePrompt = (promptId: string) => {
     deletePrompt(promptId);
     setRefresh((r) => r + 1); // force re-render
+  };
+
+  // Reusable ChatItem component
+  const ChatItem: React.FC<{
+    chatId: string;
+    showInModal?: boolean;
+    isMobile?: boolean;
+    highlightSearchQuery?: string;
+  }> = ({
+    chatId,
+    showInModal = false,
+    isMobile = false,
+    highlightSearchQuery,
+  }) => {
+    const displayText = getChatTitle(chatId);
+    const isActive = currentChatId === chatId;
+
+    // Highlight matching text for search results
+    const highlightText = (text: string, query: string) => {
+      if (!query?.trim()) return text;
+      const regex = new RegExp(
+        `(${query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`,
+        "gi"
+      );
+      const parts = text.split(regex);
+      return parts.map((part, index) =>
+        regex.test(part) ? (
+          <span key={index} className="bg-yellow-300 text-black px-1 rounded">
+            {part}
+          </span>
+        ) : (
+          part
+        )
+      );
+    };
+
+    return (
+      <li
+        key={chatId}
+        className={`text-xs w-full text-white cursor-pointer flex items-center duration-200 transition-all justify-between group px-3 py-2 ${
+          showInModal ? "my-2" : ""
+        } ${
+          isActive
+            ? "bg-appDark rounded-[8px]"
+            : "hover:bg-appDark/50 hover:rounded-[8px]"
+        }`}
+        onClick={() => {
+          router.push(`/chat/${chatId}`);
+          if (showInModal) {
+            setShowSearchModal(false);
+            setSearchQuery("");
+          }
+        }}
+        // only set this if showInModal is false
+        onMouseEnter={showInModal ? undefined : () => setHoveredChatId(chatId)}
+        onMouseLeave={showInModal ? undefined : () => setHoveredChatId(null)}
+      >
+        <span className={`truncate flex-1 ${isMobile ? "" : "mr-2"}`}>
+          {highlightSearchQuery
+            ? highlightText(displayText, highlightSearchQuery)
+            : displayText}
+        </span>
+        {hoveredChatId === chatId && !showInModal && (
+          <button
+            className="duration-500 cursor-pointer hover:scale-125 flex-shrink-0"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleDelete(chatId);
+            }}
+            title="Delete chat"
+          >
+            <Image
+              src="/icons/delete.svg"
+              alt="Delete"
+              width={isMobile ? 18 : 16}
+              height={isMobile ? 18 : 16}
+            />
+          </button>
+        )}
+      </li>
+    );
   };
 
   // Helper component to render a group of chat rooms
@@ -321,79 +429,13 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
           {title}
         </p>
         <div className={showInModal ? "px-3" : ""}>
-          {chats.map(([chatId, messages]) => {
-            const firstMsg: Message | null =
-              messages.length > 0 ? messages[0] : null;
-            let displayText = `Chat ${chatId}`;
-            if (firstMsg) {
-              if (firstMsg.type === "TextMessage" && "content" in firstMsg) {
-                displayText = firstMsg.content as string;
-              }
-            }
-            return (
-              <li
-                key={chatId}
-                className={`text-xs ${
-                  showInModal ? "my-4" : ""
-                } w-full text-white cursor-pointer truncate flex items-center duration-500 transition-all justify-between group`}
-                onClick={() => {
-                  router.push(`/chat/${chatId}`);
-                  if (showInModal) {
-                    setShowSearchModal(false);
-                    setSearchQuery(""); // Clear search when navigating
-                  }
-                }}
-                onMouseEnter={() => setHoveredChatId(chatId)}
-                onMouseLeave={() => setHoveredChatId(null)}
-              >
-                <span className="truncate">{displayText}</span>
-                {hoveredChatId === chatId && (
-                  <button
-                    className="duration-500 cursor-pointer hover:scale-125"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDelete(chatId);
-                    }}
-                    title="Delete chat"
-                  >
-                    <Image
-                      src="/icons/delete.svg"
-                      alt="Delete"
-                      width={14}
-                      height={14}
-                    />
-                  </button>
-                )}
-              </li>
-            );
-          })}
+          {chats.map(([chatId]) => (
+            <ChatItem key={chatId} chatId={chatId} showInModal={showInModal} />
+          ))}
         </div>
       </div>
     );
   };
-
-  const socialLinks = [
-    {
-      name: "Facebook",
-      href: "#",
-      icon: "/icons/facebook.svg",
-    },
-    {
-      name: "Instagram",
-      href: "#",
-      icon: "/icons/instagram.svg",
-    },
-    {
-      name: "LinkedIn",
-      href: "#",
-      icon: "/icons/linkedin.svg",
-    },
-    {
-      name: "Twitter",
-      href: "#",
-      icon: "/icons/twitter.svg",
-    },
-  ];
 
   // Mobile overlay logic
   // Sidebar is always visible on md+ screens, toggled on mobile
@@ -412,13 +454,13 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
         <>
           {/* Overlay for saved prompts modal */}
           <div
-            className="fixed inset-0 z-40 bg-opacity-50 transition-opacity"
+            className="fixed inset-0 z-[100] bg-opacity-50 transition-opacity"
             onClick={() => {
               setShowSavedPromptsModal(false);
               setPromptSearchQuery("");
             }}
           />
-          <div className="w-[515px] shadow-[2px_2px_10px] shadow-appGray/30 p-4 fixed left-[50%] -translate-x-1/2 top-[50%] -translate-y-1/2 z-50 h-[616px] rounded-[20px] bg-[#303131] mx-auto">
+          <div className="w-[515px] shadow-[2px_2px_10px] shadow-appGray/30 p-4 fixed left-[50%] -translate-x-1/2 top-[50%] -translate-y-1/2 z-[110] h-[616px] rounded-[20px] bg-[#303131] mx-auto">
             <div className="flex items-center border-b-[0.5px] border-[#D9D9D9]/40 px-5">
               <svg
                 width="20"
@@ -613,13 +655,13 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
         <>
           {/* Overlay for search modal */}
           <div
-            className="fixed  inset-0 z-40  bg-opacity-50 transition-opacity"
+            className="fixed  inset-0 z-[100]   bg-opacity-50 transition-opacity"
             onClick={() => {
               setShowSearchModal(false);
               setSearchQuery("");
             }}
           />
-          <div className="w-[515px] shadow-[2px_2px_10px] shadow-appGray/30 p-4 fixed left-[50%] -translate-x-1/2 top-[50%] -translate-y-1/2 z-50 h-[616px] rounded-[20px] bg-[#303131] mx-auto ">
+          <div className="w-[515px] shadow-[2px_2px_10px] shadow-appGray/30 p-4 fixed left-[50%] -translate-x-1/2 top-[50%] -translate-y-1/2 z-[110] h-[616px]  rounded-[20px] bg-[#303131] mx-auto ">
             <div className="flex items-center border-b-[0.5px]  border-[#D9D9D9]/40  px-5">
               <svg
                 width="20"
@@ -747,82 +789,14 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                           Search Results ({allFilteredChats.length})
                         </p>
                         <div className="px-3">
-                          {allFilteredChats.map(([chatId, messages]) => {
-                            const firstMsg: Message | null =
-                              messages.length > 0 ? messages[0] : null;
-                            let displayText = `Chat ${chatId}`;
-                            if (firstMsg) {
-                              if (
-                                firstMsg.type === "TextMessage" &&
-                                "content" in firstMsg
-                              ) {
-                                displayText = firstMsg.content as string;
-                              }
-                            }
-
-                            // Highlight matching text
-                            const highlightText = (
-                              text: string,
-                              query: string
-                            ) => {
-                              if (!query.trim()) return text;
-                              const regex = new RegExp(
-                                `(${query.replace(
-                                  /[.*+?^${}()|[\]\\]/g,
-                                  "\\$&"
-                                )})`,
-                                "gi"
-                              );
-                              const parts = text.split(regex);
-                              return parts.map((part, index) =>
-                                regex.test(part) ? (
-                                  <span
-                                    key={index}
-                                    className="bg-yellow-300 text-black px-1 rounded"
-                                  >
-                                    {part}
-                                  </span>
-                                ) : (
-                                  part
-                                )
-                              );
-                            };
-
-                            return (
-                              <li
-                                key={chatId}
-                                className="text-xs my-4 w-full text-white cursor-pointer truncate flex items-center duration-500 transition-all justify-between group"
-                                onClick={() => {
-                                  router.push(`/chat/${chatId}`);
-                                  setShowSearchModal(false);
-                                  setSearchQuery("");
-                                }}
-                                onMouseEnter={() => setHoveredChatId(chatId)}
-                                onMouseLeave={() => setHoveredChatId(null)}
-                              >
-                                <span className="truncate">
-                                  {highlightText(displayText, searchQuery)}
-                                </span>
-                                {hoveredChatId === chatId && (
-                                  <button
-                                    className="duration-500 cursor-pointer hover:scale-125"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleDelete(chatId);
-                                    }}
-                                    title="Delete chat"
-                                  >
-                                    <Image
-                                      src="/icons/delete.svg"
-                                      alt="Delete"
-                                      width={14}
-                                      height={14}
-                                    />
-                                  </button>
-                                )}
-                              </li>
-                            );
-                          })}
+                          {allFilteredChats.map(([chatId]) => (
+                            <ChatItem
+                              key={chatId}
+                              chatId={chatId}
+                              showInModal={true}
+                              highlightSearchQuery={searchQuery}
+                            />
+                          ))}
                         </div>
                       </div>
                     );
@@ -854,7 +828,12 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                         Recent Chats
                       </p>
                       <div className="px-3">
-                        <li className="text-xs text-gray-400">No chats yet.</li>
+                        <li
+                          suppressHydrationWarning
+                          className="text-xs text-gray-400"
+                        >
+                          No chats yet.
+                        </li>
                       </div>
                     </div>
                   )}
@@ -887,6 +866,13 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
           />
           <button
             onClick={() => {
+              if (showSearchModal) {
+                setShowSearchModal(false);
+              }
+              if (showSavedPromptsModal) {
+                setShowSavedPromptsModal(false);
+              }
+
               router.push("/");
               if (onClose) {
                 onClose();
@@ -942,11 +928,15 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                   onClick={(e) => {
                     if (item.name === "Search") {
                       e.preventDefault();
+                      setShowSavedPromptsModal(false);
                       setShowSearchModal(!showSearchModal);
                     } else if (item.name === "Saved Prompts") {
                       e.preventDefault();
+                      setShowSearchModal(false);
                       setShowSavedPromptsModal(!showSavedPromptsModal);
                     } else {
+                      setShowSearchModal(false);
+                      setShowSavedPromptsModal(false);
                       if (onClose) {
                         onClose();
                       }
@@ -967,110 +957,25 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
           {/* Chat History Section */}
           <div className="relative h-max lg:mb-6 flex flex-col items-start py-2 pl-9">
             {/* Custom SVG Line with Rounded Ends */}
-            {(() => {
-              const gradientId = `lineGradient-${Math.random()
-                .toString(36)
-                .substr(2, 9)}`;
-              return (
-                <svg
-                  className="absolute left-3 top-0 w-[1px] h-full"
-                  viewBox="0 0 2 100"
-                  preserveAspectRatio="none"
-                >
-                  <defs>
-                    <linearGradient
-                      suppressHydrationWarning
-                      id={gradientId}
-                      x1="0%"
-                      y1="0%"
-                      x2="0%"
-                      y2="100%"
-                    >
-                      <stop
-                        offset="0%"
-                        stopColor="var(--color-primary)"
-                        stopOpacity="0"
-                      />
-                      <stop
-                        offset="15%"
-                        stopColor="var(--color-primary)"
-                        stopOpacity="1"
-                      />
-                      <stop
-                        offset="85%"
-                        stopColor="var(--color-primary)"
-                        stopOpacity="1"
-                      />
-                      <stop
-                        offset="100%"
-                        stopColor="var(--color-primary)"
-                        stopOpacity="0"
-                      />
-                    </linearGradient>
-                  </defs>
-                  <rect
-                    suppressHydrationWarning
-                    x="0"
-                    y="0"
-                    width="2"
-                    height="100"
-                    fill={`url(#${gradientId})`}
-                    rx="1"
-                    ry="1"
-                  />
-                </svg>
-              );
-            })()}
+            <GradientLine />
 
-            <ul className="hidden lg:flex w-[85%] flex-col gap-4">
+            <ul
+              suppressHydrationWarning
+              className="hidden lg:flex w-[95%] flex-col gap-1"
+            >
               {chatRooms.length > 0 ? (
                 <>
                   {groupedChatRooms.today.length > 0 && (
                     <>
-                      <div className="text-[9px] text-[#8A8A8A] mb-2">
+                      <div
+                        suppressHydrationWarning
+                        className="text-[9px] text-[#8A8A8A] mb-2"
+                      >
                         Today
                       </div>
-                      {groupedChatRooms.today.map(([chatId, messages]) => {
-                        const firstMsg: Message | null =
-                          messages.length > 0 ? messages[0] : null;
-                        let displayText = `Chat ${chatId}`;
-                        if (firstMsg) {
-                          if (
-                            firstMsg.type === "TextMessage" &&
-                            "content" in firstMsg
-                          ) {
-                            displayText = firstMsg.content as string;
-                          }
-                        }
-                        return (
-                          <li
-                            key={chatId}
-                            className="text-xs w-full text-white cursor-pointer truncate flex items-center duration-500 transition-all justify-between group"
-                            onClick={() => router.push(`/chat/${chatId}`)}
-                            onMouseEnter={() => setHoveredChatId(chatId)}
-                            onMouseLeave={() => setHoveredChatId(null)}
-                          >
-                            <span className="truncate">{displayText}</span>
-                            {hoveredChatId === chatId && (
-                              <button
-                                className="duration-500 cursor-pointer hover:scale-125"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDelete(chatId);
-                                }}
-                                title="Delete chat"
-                              >
-                                <Image
-                                  src="/icons/delete.svg"
-                                  alt="Delete"
-                                  width={14}
-                                  height={14}
-                                />
-                              </button>
-                            )}
-                          </li>
-                        );
-                      })}
+                      {groupedChatRooms.today.map(([chatId]) => (
+                        <ChatItem key={chatId} chatId={chatId} />
+                      ))}
                     </>
                   )}
                   {groupedChatRooms.yesterday.length > 0 && (
@@ -1078,47 +983,9 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                       <div className="text-[9px] text-[#8A8A8A] mb-2 mt-4">
                         Yesterday
                       </div>
-                      {groupedChatRooms.yesterday.map(([chatId, messages]) => {
-                        const firstMsg: Message | null =
-                          messages.length > 0 ? messages[0] : null;
-                        let displayText = `Chat ${chatId}`;
-                        if (firstMsg) {
-                          if (
-                            firstMsg.type === "TextMessage" &&
-                            "content" in firstMsg
-                          ) {
-                            displayText = firstMsg.content as string;
-                          }
-                        }
-                        return (
-                          <li
-                            key={chatId}
-                            className="text-xs w-full text-white cursor-pointer truncate flex items-center duration-500 transition-all justify-between group"
-                            onClick={() => router.push(`/chat/${chatId}`)}
-                            onMouseEnter={() => setHoveredChatId(chatId)}
-                            onMouseLeave={() => setHoveredChatId(null)}
-                          >
-                            <span className="truncate">{displayText}</span>
-                            {hoveredChatId === chatId && (
-                              <button
-                                className="duration-500 cursor-pointer hover:scale-125"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDelete(chatId);
-                                }}
-                                title="Delete chat"
-                              >
-                                <Image
-                                  src="/icons/delete.svg"
-                                  alt="Delete"
-                                  width={14}
-                                  height={14}
-                                />
-                              </button>
-                            )}
-                          </li>
-                        );
-                      })}
+                      {groupedChatRooms.yesterday.map(([chatId]) => (
+                        <ChatItem key={chatId} chatId={chatId} />
+                      ))}
                     </>
                   )}
                   {groupedChatRooms.previous7Days.length > 0 && (
@@ -1128,47 +995,9 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                       </div>
                       {groupedChatRooms.previous7Days
                         .slice(0, 3)
-                        .map(([chatId, messages]) => {
-                          const firstMsg: Message | null =
-                            messages.length > 0 ? messages[0] : null;
-                          let displayText = `Chat ${chatId}`;
-                          if (firstMsg) {
-                            if (
-                              firstMsg.type === "TextMessage" &&
-                              "content" in firstMsg
-                            ) {
-                              displayText = firstMsg.content as string;
-                            }
-                          }
-                          return (
-                            <li
-                              key={chatId}
-                              className="text-xs w-full text-white cursor-pointer truncate flex items-center duration-500 transition-all justify-between group"
-                              onClick={() => router.push(`/chat/${chatId}`)}
-                              onMouseEnter={() => setHoveredChatId(chatId)}
-                              onMouseLeave={() => setHoveredChatId(null)}
-                            >
-                              <span className="truncate">{displayText}</span>
-                              {hoveredChatId === chatId && (
-                                <button
-                                  className="duration-500 cursor-pointer hover:scale-125"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleDelete(chatId);
-                                  }}
-                                  title="Delete chat"
-                                >
-                                  <Image
-                                    src="/icons/delete.svg"
-                                    alt="Delete"
-                                    width={14}
-                                    height={14}
-                                  />
-                                </button>
-                              )}
-                            </li>
-                          );
-                        })}
+                        .map(([chatId]) => (
+                          <ChatItem key={chatId} chatId={chatId} />
+                        ))}
                     </>
                   )}
                   {groupedChatRooms.previous30Days.length > 0 && (
@@ -1178,55 +1007,22 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                       </div>
                       {groupedChatRooms.previous30Days
                         .slice(0, 2)
-                        .map(([chatId, messages]) => {
-                          const firstMsg: Message | null =
-                            messages.length > 0 ? messages[0] : null;
-                          let displayText = `Chat ${chatId}`;
-                          if (firstMsg) {
-                            if (
-                              firstMsg.type === "TextMessage" &&
-                              "content" in firstMsg
-                            ) {
-                              displayText = firstMsg.content as string;
-                            }
-                          }
-                          return (
-                            <li
-                              key={chatId}
-                              className="text-xs w-full text-white cursor-pointer truncate flex items-center duration-500 transition-all justify-between group"
-                              onClick={() => router.push(`/chat/${chatId}`)}
-                              onMouseEnter={() => setHoveredChatId(chatId)}
-                              onMouseLeave={() => setHoveredChatId(null)}
-                            >
-                              <span className="truncate">{displayText}</span>
-                              {hoveredChatId === chatId && (
-                                <button
-                                  className="duration-500 cursor-pointer hover:scale-125"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleDelete(chatId);
-                                  }}
-                                  title="Delete chat"
-                                >
-                                  <Image
-                                    src="/icons/delete.svg"
-                                    alt="Delete"
-                                    width={14}
-                                    height={14}
-                                  />
-                                </button>
-                              )}
-                            </li>
-                          );
-                        })}
+                        .map(([chatId]) => (
+                          <ChatItem key={chatId} chatId={chatId} />
+                        ))}
                     </>
                   )}
                 </>
               ) : (
-                <li className="text-xs text-gray-400">No chats yet.</li>
+                <li suppressHydrationWarning className="text-xs text-gray-400">
+                  No chats yet.
+                </li>
               )}
             </ul>
-            <ul className="flex lg:hidden flex-col gap-4">
+            <ul
+              suppressHydrationWarning
+              className="flex lg:hidden flex-col gap-4"
+            >
               {chatRooms.length > 0 ? (
                 [
                   ...groupedChatRooms.today,
@@ -1235,49 +1031,13 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                   ...groupedChatRooms.previous30Days,
                 ]
                   .slice(0, 3)
-                  .map(([chatId, messages]) => {
-                    const firstMsg: Message | null =
-                      messages.length > 0 ? messages[0] : null;
-                    let displayText = `Chat ${chatId}`;
-                    if (firstMsg) {
-                      if (
-                        firstMsg.type === "TextMessage" &&
-                        "content" in firstMsg
-                      ) {
-                        displayText = firstMsg.content as string;
-                      }
-                    }
-                    return (
-                      <li
-                        key={chatId}
-                        className="text-xs text-white cursor-pointer truncate flex items-center group"
-                        onClick={() => router.push(`/chat/${chatId}`)}
-                        onMouseEnter={() => setHoveredChatId(chatId)}
-                        onMouseLeave={() => setHoveredChatId(null)}
-                      >
-                        <span className="flex-1 truncate">{displayText}</span>
-                        {hoveredChatId === chatId && (
-                          <button
-                            className=""
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDelete(chatId);
-                            }}
-                            title="Delete chat"
-                          >
-                            <Image
-                              src="/icons/delete.svg"
-                              alt="Delete"
-                              width={16}
-                              height={16}
-                            />
-                          </button>
-                        )}
-                      </li>
-                    );
-                  })
+                  .map(([chatId]) => (
+                    <ChatItem key={chatId} chatId={chatId} isMobile={true} />
+                  ))
               ) : (
-                <li className="text-xs text-gray-400">No chats yet.</li>
+                <li suppressHydrationWarning className="text-xs text-gray-400">
+                  No chats yet.
+                </li>
               )}
             </ul>
             {/* See all button for mobile - show only if there are more than 4 chats */}
@@ -1306,11 +1066,14 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
 
           {/* Bottom Links Section */}
           <div className=" bg-appDark absolute bottom-5 mr-6 rounded-[12px] p-4 ">
-            <Link href={"#"} className="flex py-2 items-center">
+            <Link href={"https://exyra.ai"} className="flex py-2 items-center">
               <p className="text-xs">About Exyra</p>
               <Image src="/icons/arrow.svg" alt="arr" width={20} height={20} />
             </Link>
-            <Link href={"#"} className="flex py-2 items-center">
+            <Link
+              href={"https://docs.exyra.ai"}
+              className="flex py-2 items-center"
+            >
               <p className="text-xs">Exyra Docs</p>
               <Image src="/icons/arrow.svg" alt="arr" width={20} height={20} />
             </Link>

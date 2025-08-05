@@ -72,3 +72,12 @@ body {
   font-family: "Inter Display", Arial, Helvetica, sans-serif;
   font-weight: 500;
 }
+
+.scrollbar-hide {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+}
+

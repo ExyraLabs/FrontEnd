@@ -1,8 +1,6 @@
 "use client";
 import Image from "next/image";
-import React, { useState } from "react";
-import AgentCard from "@/components/AgentCard";
-import { chainImageMapping } from "@/utils/constants";
+import { useState } from "react";
 
 const TABS = [
   "All",

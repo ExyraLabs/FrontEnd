@@ -1,10 +1,11 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono, Montserrat, Inter } from "next/font/google";
-import "./globals.css";
-import Sidebar from "@/components/Sidebar";
+import FloatingGainButton from "@/components/FloatingGainButton";
 import Header from "@/components/Header";
 import WalletProvider from "@/components/providers/WalletProvider";
+import Sidebar from "@/components/Sidebar";
+import type { Metadata } from "next";
+import { Inter } from "next/font/google";
 import { headers } from "next/headers";
+import "./globals.css";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -41,10 +42,11 @@ export default async function RootLayout({
             <div className="hidden lg:flex  lg:w-[20%] flex-col">
               <Sidebar />
             </div>
-            <div className="flex  flex-col flex-1">
+            <div className="flex overflow-y-clip  flex-col flex-1">
               <Header />
               {children}
             </div>
+            <FloatingGainButton />
           </div>
         </WalletProvider>
       </body>

@@ -1,10 +1,11 @@
+import { MessageRole, TextMessage } from "@copilotkit/runtime-client-gql";
+import { useAppKitAccount } from "@reown/appkit/react";
+import { motion } from "framer-motion";
 import Image from "next/image";
-import React, { useState } from "react";
-import Modal from "./Modal";
-import { useAppKit, useAppKitAccount } from "@reown/appkit/react";
-import { useChatRoomsMessages } from "../hooks/useChatRoomsMessages";
 import { useRouter } from "next/navigation";
-import { TextMessage, MessageRole } from "@copilotkit/runtime-client-gql";
+import { useState } from "react";
+import { useChatRoomsMessages } from "../hooks/useChatRoomsMessages";
+import ConnectWalletModal from "./ConnectWalletModal";
 
 const examples = [
   "How can I get started?",
@@ -42,15 +43,8 @@ const ChatSection = () => {
   const [showDefiOptions, setShowDefiOptions] = useState(false);
   const { address } = useAppKitAccount();
   const [showModal, setShowModal] = useState(false);
-  const { open } = useAppKit();
 
-  const handleConnectWallet = () => {
-    // TODO: Implement wallet connection logic
-    open();
-    console.log("Connect wallet clicked");
-  };
-
-  const { addMessage, loadChatRooms } = useChatRoomsMessages();
+  const { createChatRoom, loadChatRooms } = useChatRoomsMessages();
   const router = useRouter();
   const [inputValue, setInputValue] = useState("");
 
@@ -82,66 +76,28 @@ const ChatSection = () => {
       content: prompt,
       createdAt: new Date().toISOString(),
     });
-    // Add message to new chatroom
-    addMessage(chatId, message);
+
+    // Create chat room - title will be auto-generated from message content
+    createChatRoom(chatId, "", message);
+
     setInputValue("");
     // Switch route to /chat/[id]
     router.push(`/chat/${chatId}`);
   };
   return (
     <div className=" flex-1 px-4  relative flex flex-col">
-      <Modal isOpen={showModal} onClose={() => setShowModal(false)}>
-        <div className="w-[295px] flex flex-col gap-3 items-center justify-center h-[195px] rounded-[16px] bg-[#212121]">
-          <div className="w-[49px] h-[49px] relative flex items-center justify-center">
-            <span className="text-primary absolute top-0.5 -right-0.5">
-              <svg
-                width="13"
-                height="13"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  d="M12 6.494c-3.037 0-5.494 2.47-5.494 5.506A5.51 5.51 0 001 6.494c3.037 0 5.506-2.457 5.506-5.494A5.491 5.491 0 0012 6.494z"
-                  fill="currentColor"
-                  stroke="currentColor"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </span>
-            <Image src={"/icons/wallet-pri.svg"} alt="wallet" fill />
-          </div>
-          <p className="text-[#D9D9D9] text-sm text-center">
-            Connect your wallet to get personalized gain Recommendations
-          </p>
-          <button
-            onClick={handleConnectWallet}
-            className="flex items-center gap-1 lg:gap-2 bg-primary px-3 lg:h-[42px] py-1 justify-center lg:w-auto hover:bg-primary/70 text-white cursor-pointer  rounded-full transition-colors"
-          >
-            {/* Wallet Icon */}
-            <Image
-              src="/icons/wallet.svg"
-              alt="Wallet Icon"
-              width={20}
-              height={20}
-            />
-
-            <span className="hidden lg:flex text-sm tracking-tight">
-              {address
-                ? address.slice(0, 6) + "..." + address.slice(-4)
-                : "Connect Wallet"}
-            </span>
-            <span className="text-xs flex lg:hidden">
-              {address
-                ? address.slice(0, 4) + "..." + address.slice(-4)
-                : "Connect"}
-            </span>
-          </button>
-        </div>
-      </Modal>
+      <ConnectWalletModal isOpen={showModal} onClose={() => setShowModal(false)} />
       <div className=" flex flex-col justify-center   flex-1">
-        <div className="flex text-primary items-center justify-center lg:justify-start  gap-[9px] ">
-          <svg
+        <motion.div
+          initial={{ y: 30, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.6, ease: "easeOut" }}
+          className="flex text-primary items-center justify-center lg:justify-start  gap-[9px] "
+        >
+          <motion.svg
+            initial={{ scale: 0, rotate: -180 }}
+            animate={{ scale: 1, rotate: 0 }}
+            transition={{ duration: 0.8, ease: "easeOut", delay: 0.2 }}
             width="33"
             height="32"
             fill="none"
@@ -198,16 +154,40 @@ const ChatSection = () => {
                 />
               </filter>
             </defs>
-          </svg>
-          <h5 className="bg-gradient-to-r from-[#4F3CFF] via-[#7EA1FB]/90 to-primary  text-transparent bg-clip-text text-[22px] lg:text-[32px] font-medium">
+          </motion.svg>
+          <motion.h5
+            initial={{ x: -20, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            transition={{ duration: 0.7, ease: "easeOut", delay: 0.3 }}
+            className="bg-gradient-to-r from-[#4F3CFF] via-[#7EA1FB]/90 to-primary  text-transparent bg-clip-text text-[22px] lg:text-[32px] font-medium"
+          >
             Hello, how can I help?
-          </h5>
-        </div>
-        <div className="flex   mt-[50px] flex-col">
-          <div className=" flex  lg:justify-start gap-x-2 gap-y-2  justify-center  flex-wrap ">
+          </motion.h5>
+        </motion.div>
+        <motion.div
+          initial={{ y: 40, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.6, ease: "easeOut", delay: 0.5 }}
+          className="flex   mt-[50px] flex-col"
+        >
+          <motion.div
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ duration: 0.5, ease: "easeOut", delay: 0.7 }}
+            className=" flex  lg:justify-start gap-x-2 gap-y-2  justify-center  flex-wrap "
+          >
             {examples.map((example, index) => (
-              <button
+              <motion.button
                 key={index}
+                initial={{ scale: 0, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{
+                  duration: 0.4,
+                  ease: "easeOut",
+                  delay: 0.8 + index * 0.1,
+                }}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
                 className="bg-[#303131] min-w-max rounded-[14px] text-white px-2.5 lg:px-4 h-[31px] text-[12px] lg:text-xs font-medium lg:mr-2 mb-2 hover:bg-primary/70 duration-500 transition-colors cursor-pointer"
                 onClick={() => {
                   // Handle example click
@@ -215,11 +195,19 @@ const ChatSection = () => {
                 }}
               >
                 {example}
-              </button>
+              </motion.button>
             ))}
-          </div>
-          <div className="bg-[#303131] w-full mt-5 lg:mt-1 lg:w-[90%] rounded-[24px] p-5">
-            <textarea
+          </motion.div>
+          <motion.div
+            className="bg-[#303131] w-full mt-5 lg:mt-1 lg:w-[90%] rounded-[24px] p-5"
+            initial={{ y: 40, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ duration: 0.5, ease: "easeOut", delay: 1.1 }}
+          >
+            <motion.textarea
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.3, ease: "easeOut", delay: 1.2 }}
               className="w-full min-h-[80px] bg-transparent text-white placeholder:text-[#DAD0D0] font-medium border-none focus:outline-none resize-none"
               placeholder="Ask anything ..."
               value={inputValue}
@@ -227,11 +215,21 @@ const ChatSection = () => {
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
-                  handleSendMessage();
+                  if (!address) {
+                    setShowModal(true);
+                    return;
+                  } else {
+                    handleSendMessage();
+                  }
                 }
               }}
-            ></textarea>
-            <div className=" flex justify-between items-center  ">
+            ></motion.textarea>
+            <motion.div
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ duration: 0.4, ease: "easeOut", delay: 1.4 }}
+              className=" flex justify-between items-center  "
+            >
               <div className="h-[41px] flex items-center gap-3 ">
                 {/* <button className="flex items-center lg:gap-2 border-[#474848] border bg-[#282A2E] w-[48px] h-[48px] lg:h-full  lg:px-5 lg:w-[123px] rounded-full justify-center hover:bg-[#d94d32] text-white cursor-pointer lg:rounded-[24px] transition-colors">
                   <Image
@@ -243,21 +241,34 @@ const ChatSection = () => {
                   />
                   <span className="text-sm hidden lg:flex">Rewards</span>
                 </button> */}
-                <button
+                <motion.button
+                  initial={{ scale: 0, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ duration: 0.3, ease: "easeOut", delay: 1.3 }}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
                   onClick={() => setShowDefiOptions(!showDefiOptions)}
                   className={`flex items-center gap-2 border-[#474848] border bg-[#282A2E] h-full lg:px-5 w-[65px] lg:w-[197px] justify-center relative hover:border-primary text-white cursor-pointer rounded-[24px] ${
                     showDefiOptions ? "border-primary" : " "
                   }`}
                 >
                   {showDefiOptions && (
-                    <div
+                    <motion.div
+                      initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                      transition={{ duration: 0.2, ease: "easeOut" }}
                       className={`absolute ${
                         showDefiOptions ? "opacity-100" : "opacity-0"
                       } duration-300 transition-all -top-1 -translate-y-full left-0 w-full px-[5px] py-[9px] flex flex-col gap-2  bg-[#282A2E] rounded-lg z-10`}
                     >
-                      {DefiOptions.map((option) => (
-                        <div
+                      {DefiOptions.map((option, index) => (
+                        <motion.div
                           key={option.title}
+                          initial={{ opacity: 0, x: -10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ duration: 0.2, delay: index * 0.05 }}
+                          whileHover={{ scale: 1.02 }}
                           className="flex items-center gap-2 px-4 py-2 text-white  text-xs cursor-pointer hover:bg-[#1E1F1F] rounded-[14px] w-full text-left transition-colors"
                         >
                           <Image
@@ -267,9 +278,9 @@ const ChatSection = () => {
                             height={16}
                           />
                           {option.title}
-                        </div>
+                        </motion.div>
                       ))}
-                    </div>
+                    </motion.div>
                   )}
                   <span
                     className={`${
@@ -300,7 +311,7 @@ const ChatSection = () => {
                     width={11}
                     height={11}
                   />
-                </button>
+                </motion.button>
               </div>
 
               <div className="flex items-center gap-3 relative">
@@ -345,8 +356,20 @@ const ChatSection = () => {
                     </div>
                   </div>
                 </div>
-                <button
-                  onClick={handleSendMessage}
+                <motion.button
+                  initial={{ scale: 0, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ duration: 0.3, ease: "easeOut", delay: 1.5 }}
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                  onClick={() => {
+                    if (!address) {
+                      setShowModal(true);
+                      return;
+                    } else {
+                      handleSendMessage();
+                    }
+                  }}
                   className="bg-[#A9A0FF] cursor-pointer active:scale-90 hover:bg-primary duration-500 w-[32px] h-[32px] lg:w-[42px] lg:h-[42px] rounded-full flex justify-center items-center"
                 >
                   <div className="relative w-[22px] lg:w-[24px] h-[22px] lg:h-[24px]">
@@ -357,16 +380,12 @@ const ChatSection = () => {
                       height={24}
                     />
                   </div>
-                </button>
+                </motion.button>
               </div>
-            </div>
-          </div>
-        </div>
+            </motion.div>
+          </motion.div>
+        </motion.div>
       </div>
-      <button className="flex absolute bottom-5 right-5  items-center gap-2 border-[#474848] border bg-primary lg:w-[251px] w-[40px] h-[40px] justify-center hover:bg-[#A9A0FF] text-white cursor-pointer rounded-full lg:rounded-[24px] transition-colors">
-        <Image src={"/icons/star.svg"} alt="reward" width={20} height={20} />
-        <span className="hidden lg:flex">Gain Recommendation</span>
-      </button>
     </div>
   );
 };
