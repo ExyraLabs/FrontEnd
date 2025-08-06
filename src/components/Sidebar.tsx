@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useChatRoomsMessages } from "../hooks/useChatRoomsMessages";
 import { useSavedPrompts, SavedPrompt } from "../hooks/useSavedPrompts";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Message } from "@copilotkit/runtime-client-gql";
 import GradientLine from "./GradientLine";
 import { socialLinks } from "@/utils/constants";
@@ -187,7 +187,14 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
   const [showSavedPromptsModal, setShowSavedPromptsModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [promptSearchQuery, setPromptSearchQuery] = useState("");
-  const chatRoomsObj = typeof window !== "undefined" ? loadChatRooms() : {};
+  const [isClient, setIsClient] = useState(false);
+
+  // Fix hydration by ensuring we only render client-specific content after hydration
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  const chatRoomsObj = isClient ? loadChatRooms() : {};
   const chatRooms = Object.entries(chatRoomsObj);
 
   // Utility function to get the first message date from a chat room (chat creation time)
@@ -220,6 +227,16 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
 
   // Recalculate grouped chat rooms when refresh changes
   const groupedChatRooms = useMemo(() => {
+    // Return empty groups if not on client yet
+    if (!isClient) {
+      return {
+        today: [] as [string, Message[]][],
+        yesterday: [] as [string, Message[]][],
+        previous7Days: [] as [string, Message[]][],
+        previous30Days: [] as [string, Message[]][],
+      };
+    }
+
     // Utility function to categorize chat rooms by time periods
     const groupChatRoomsByTime = (chatRoomsToGroup: [string, Message[]][]) => {
       const now = new Date();
@@ -270,7 +287,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
 
     return groupChatRoomsByTime(chatRooms);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chatRooms, refresh]);
+  }, [chatRooms, refresh, isClient]);
 
   // Filter chat rooms based on search query
   const filteredChatRooms = useMemo(() => {
@@ -307,8 +324,9 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
 
   // Filter saved prompts based on search query
   const filteredSavedPrompts = useMemo(() => {
-    const savedPrompts =
-      typeof window !== "undefined" ? loadSavedPrompts() : [];
+    if (!isClient) return [];
+
+    const savedPrompts = loadSavedPrompts();
 
     if (!promptSearchQuery.trim()) {
       return savedPrompts;
@@ -321,7 +339,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
         (prompt.title && prompt.title.toLowerCase().includes(query))
       );
     });
-  }, [loadSavedPrompts, promptSearchQuery]);
+  }, [loadSavedPrompts, promptSearchQuery, isClient]);
 
   const handleDelete = (chatId: string) => {
     deleteChatRoom(chatId);
@@ -963,7 +981,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
               suppressHydrationWarning
               className="hidden lg:flex w-[95%] flex-col gap-1"
             >
-              {chatRooms.length > 0 ? (
+              {isClient && chatRooms.length > 0 ? (
                 <>
                   {groupedChatRooms.today.length > 0 && (
                     <>
@@ -1015,7 +1033,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                 </>
               ) : (
                 <li suppressHydrationWarning className="text-xs text-gray-400">
-                  No chats yet.
+                  {isClient ? "No chats yet." : "Loading..."}
                 </li>
               )}
             </ul>
@@ -1023,7 +1041,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
               suppressHydrationWarning
               className="flex lg:hidden flex-col gap-4"
             >
-              {chatRooms.length > 0 ? (
+              {isClient && chatRooms.length > 0 ? (
                 [
                   ...groupedChatRooms.today,
                   ...groupedChatRooms.yesterday,
@@ -1036,13 +1054,13 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                   ))
               ) : (
                 <li suppressHydrationWarning className="text-xs text-gray-400">
-                  No chats yet.
+                  {isClient ? "No chats yet." : "Loading..."}
                 </li>
               )}
             </ul>
             {/* See all button for mobile - show only if there are more than 4 chats */}
             <div className="flex lg:hidden">
-              {chatRooms.length > 4 && (
+              {isClient && chatRooms.length > 4 && (
                 <button
                   className="text-[10px] text-[#D9D9D9] hover:text-white mt-3 underline"
                   onClick={() => setShowSearchModal(true)}
@@ -1053,7 +1071,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
             </div>
             {/* See all button for desktop - show only if there are more than 5 chats */}
             <div className="hidden lg:block">
-              {chatRooms.length > 5 && (
+              {isClient && chatRooms.length > 5 && (
                 <button
                   className="text-[10px] text-[#D9D9D9] hover:text-white mt-3 underline"
                   onClick={() => setShowSearchModal(true)}

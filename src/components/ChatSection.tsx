@@ -1,11 +1,12 @@
-import { MessageRole, TextMessage } from "@copilotkit/runtime-client-gql";
+// Removed unused imports - we'll pass the prompt via URL instead
 import { useAppKitAccount } from "@reown/appkit/react";
 import { motion } from "framer-motion";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useChatRoomsMessages } from "../hooks/useChatRoomsMessages";
 import ConnectWalletModal from "./ConnectWalletModal";
+import { useCopilotMessagesContext } from "@copilotkit/react-core";
 
 const examples = [
   "How can I get started?",
@@ -48,6 +49,8 @@ const ChatSection = () => {
   const router = useRouter();
   const [inputValue, setInputValue] = useState("");
 
+  const { setMessages } = useCopilotMessagesContext();
+
   // Helper to generate a proper uuid (RFC4122 v4)
   function generateUUID() {
     return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(
@@ -69,24 +72,25 @@ const ChatSection = () => {
     while (chatRooms[chatId]) {
       chatId = generateUUID();
     }
-    // Create message object using TextMessage constructor
-    const message = new TextMessage({
-      id: generateUUID(),
-      role: MessageRole.User,
-      content: prompt,
-      createdAt: new Date().toISOString(),
-    });
 
-    // Create chat room - title will be auto-generated from message content
-    createChatRoom(chatId, "", message);
+    // Create empty chat room without any messages
+    createChatRoom(chatId, "");
 
     setInputValue("");
-    // Switch route to /chat/[id]
-    router.push(`/chat/${chatId}`);
+    // Switch route to /chat/[id] with prompt as URL parameter
+    router.push(`/chat/${chatId}?prompt=${encodeURIComponent(prompt)}`);
   };
+
+  useEffect(() => {
+    setMessages([]);
+    //eslint-disable-next-line
+  }, []);
   return (
     <div className=" flex-1 px-4  relative flex flex-col">
-      <ConnectWalletModal isOpen={showModal} onClose={() => setShowModal(false)} />
+      <ConnectWalletModal
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+      />
       <div className=" flex flex-col justify-center   flex-1">
         <motion.div
           initial={{ y: 30, opacity: 0 }}
@@ -190,8 +194,16 @@ const ChatSection = () => {
                 whileTap={{ scale: 0.95 }}
                 className="bg-[#303131] min-w-max rounded-[14px] text-white px-2.5 lg:px-4 h-[31px] text-[12px] lg:text-xs font-medium lg:mr-2 mb-2 hover:bg-primary/70 duration-500 transition-colors cursor-pointer"
                 onClick={() => {
-                  // Handle example click
-                  console.log(`Example clicked: ${example}`);
+                  // Handle example click with URL approach
+                  let chatId = generateUUID();
+                  const chatRooms = loadChatRooms();
+                  while (chatRooms[chatId]) {
+                    chatId = generateUUID();
+                  }
+                  createChatRoom(chatId, "");
+                  router.push(
+                    `/chat/${chatId}?prompt=${encodeURIComponent(example)}`
+                  );
                 }}
               >
                 {example}

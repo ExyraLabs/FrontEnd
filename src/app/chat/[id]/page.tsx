@@ -6,7 +6,7 @@ import { useChatRoomsMessages } from "@/hooks/useChatRoomsMessages";
 import { useSavedPrompts } from "@/hooks/useSavedPrompts";
 import { useAppKitAccount } from "@reown/appkit/react";
 import Image from "next/image";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams, useRouter } from "next/navigation";
 import React, { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import {
@@ -32,9 +32,12 @@ const Page = () => {
   const [inputValue, setInputValue] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { address } = useAppKitAccount();
-  const [showModal, setShowModal] = useState(!false);
+  const [showModal, setShowModal] = useState(false);
   const params = useParams();
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const id = params.id as string;
+  const promptFromUrl = searchParams.get("prompt");
   const { getMessages, saveChatRoomMessages } = useChatRoomsMessages();
   const { savePrompt, isPromptSaved, loadSavedPrompts, deletePromptByContent } =
     useSavedPrompts();
@@ -341,16 +344,9 @@ const Page = () => {
   );
   // console.log(ContextMessages, "Context Messages");
 
-  // Debug function to clear corrupted state
-  const clearConversation = () => {
-    setMessages([]);
-    saveChatRoomMessages(id, []);
-    window.location.reload();
-  };
-
   useEffect(() => {
-    // Only sync messages on initial load for existing conversations
-    if (messages.length > 0 && visibleMessages.length === 0) {
+    // Only sync existing messages on initial load for existing conversations
+    if (messages.length > 0 && visibleMessages.length === 0 && !promptFromUrl) {
       // Filter out any potentially corrupted tool calls
       const cleanMessages = messages.filter((msg) => {
         const messageType = (msg as BaseMessage)?.type || msg.constructor.name;
@@ -365,20 +361,13 @@ const Page = () => {
       if (cleanMessages.length > 0) {
         setMessages(cleanMessages);
 
-        // If we have exactly 1 message and it's a user message, resend it
-        if (cleanMessages.length === 1) {
-          const firstMessage = cleanMessages[0] as TextMessage;
-          if (firstMessage.role === Role.User) {
-            setTimeout(() => {
-              sendMessage(firstMessage.content);
-            }, 100); // Small delay to ensure context is set
-          }
-        }
+        // Remove the automatic resend logic - this was causing duplication
+        // Messages should only be sent explicitly by user action or URL prompt
       }
     }
 
     //eslint-disable-next-line
-  }, [id, visibleMessages.length]); // Also depend on visibleMessages.length to avoid interference
+  }, [id, visibleMessages.length]);
 
   useEffect(() => {
     // Load saved prompts state on mount
@@ -414,12 +403,27 @@ const Page = () => {
   }, [isLoading, visibleMessages.length, id]);
 
   useEffect(() => {
+    // Handle initial prompt from URL (for new chats)
+    if (promptFromUrl) {
+      console.log(`Sending initial prompt from URL: ${promptFromUrl}`);
+      sendMessage(promptFromUrl);
+      // Clean up URL parameter after sending the message
+      router.replace(`/chat/${id}`, { scroll: false });
+      return;
+    }
+    //eslint-disable-next-line
+  }, [promptFromUrl, id]);
+
+  useEffect(() => {
     scrollToBottom();
   }, [displayMessages]);
 
   return (
     <div className="  h-[88vh] mb-4 px-4 pt-4 relative flex flex-col">
-      <ConnectWalletModal isOpen={showModal} onClose={() => setShowModal(false)} />
+      <ConnectWalletModal
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+      />
 
       <div
         className="flex flex-col h-[78vh]   overflow-y-auto pr-2"
