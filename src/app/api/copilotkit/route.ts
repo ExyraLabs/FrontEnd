@@ -79,18 +79,49 @@ const runtime = new CopilotRuntime({
           } else {
             const errorMsg = `❌ Token '${coinId}' not found. Please use the fetchCoinId action first to get the correct coin_id, or try common IDs like 'bitcoin', 'ethereum', 'usd-coin'.`;
             console.log(`[getTokenPriceById] ${errorMsg}`);
-            return errorMsg;
+            return { error: true, message: errorMsg };
           }
         } catch (error) {
           console.error(
             `[getTokenPriceById] Error fetching price for ${coin_id}:`,
             error
           );
-          const errorMsg = `❌ Error fetching price: ${
-            error instanceof Error ? error.message : "Unknown error occurred"
-          }`;
+
+          // Provide more descriptive error messages based on error type
+          let userFriendlyError = "Unknown error occurred";
+
+          if (error instanceof Error) {
+            if (
+              error.message.includes("fetch failed") ||
+              error.message.includes("ETIMEDOUT")
+            ) {
+              userFriendlyError = `⚠️ Network timeout error while fetching price for "${coin_id}". The CoinGecko API is currently slow or unreachable. Please try again in a few moments.`;
+            } else if (
+              error.message.includes("ENOTFOUND") ||
+              error.message.includes("DNS")
+            ) {
+              userFriendlyError = `🌐 Network connection error while fetching price for "${coin_id}". Please check your internet connection and try again.`;
+            } else if (
+              error.message.includes("429") ||
+              error.message.includes("rate limit")
+            ) {
+              userFriendlyError = `⏱️ API rate limit exceeded while fetching price for "${coin_id}". Please wait a moment and try again.`;
+            } else if (error.message.includes("404")) {
+              userFriendlyError = `❌ Token "${coin_id}" not found. Please verify the coin ID is correct.`;
+            } else if (
+              error.message.includes("500") ||
+              error.message.includes("502") ||
+              error.message.includes("503")
+            ) {
+              userFriendlyError = `🔧 CoinGecko API is currently experiencing issues while fetching price for "${coin_id}". Please try again later.`;
+            } else {
+              userFriendlyError = `❌ Error fetching price for "${coin_id}": ${error.message}`;
+            }
+          }
+
+          const errorMsg = userFriendlyError;
           console.log(`[getTokenPriceById] Returning error:`, errorMsg);
-          return errorMsg;
+          return { error: true, message: errorMsg };
         }
       },
     },
@@ -114,23 +145,60 @@ const runtime = new CopilotRuntime({
           // Use utility function to find coins by symbol
           const filteredCoins = await findCoinsBySymbol(token_symbol);
 
-          const result = {
-            success: true,
-            data: filteredCoins,
-            total: filteredCoins.length,
-            coin_id: filteredCoins[0]?.id,
-          };
+          if (filteredCoins.length === 0) {
+            return {
+              error: true,
+              message: `🔍 **Coin not found**: "${token_symbol}" didn't match any cryptocurrency. Try using the full name (e.g., "Bitcoin" instead of "BTC") or verify the spelling.`,
+            };
+          }
+
+          let result = `🔍 Found ${filteredCoins.length} match(es) for "${token_symbol}":\n\n`;
+          filteredCoins.slice(0, 5).forEach((coin, index) => {
+            result += `${index + 1}. **${
+              coin.name
+            }** (${coin.symbol.toUpperCase()})\n`;
+            result += `   🆔 Coin ID: \`${coin.id}\`\n\n`;
+          });
+
+          if (filteredCoins.length > 5) {
+            result += `... and ${filteredCoins.length - 5} more results.\n\n`;
+          }
+
+          result += `💡 Use the coin ID (e.g., "${filteredCoins[0].id}") with getTokenPriceById to get price information.`;
+
           console.log(`[fetchCoinId] Returning result:`, result);
           return result;
         } catch (error) {
           console.error(`[fetchCoinId] Error:`, error);
-          const errorResult = {
-            success: false,
-            error:
-              error instanceof Error ? error.message : "Unknown error occurred",
-          };
-          console.log(`[fetchCoinId] Returning error result:`, errorResult);
-          return errorResult;
+
+          // Provide more descriptive error messages based on error type
+          let userFriendlyError = "Unknown error occurred";
+
+          if (error instanceof Error) {
+            if (
+              error.message.includes("fetch failed") ||
+              error.message.includes("ETIMEDOUT")
+            ) {
+              userFriendlyError = `⚠️ Network timeout error while searching for "${token_symbol}". The CoinGecko API is currently slow or unreachable. Please try again in a few moments, or check if the token symbol is correct.`;
+            } else if (
+              error.message.includes("ENOTFOUND") ||
+              error.message.includes("DNS")
+            ) {
+              userFriendlyError = `🌐 Network connection error while searching for "${token_symbol}". Please check your internet connection and try again.`;
+            } else if (
+              error.message.includes("429") ||
+              error.message.includes("rate limit")
+            ) {
+              userFriendlyError = `⏱️ API rate limit exceeded while searching for "${token_symbol}". Please wait a moment and try again.`;
+            } else if (error.message.includes("404")) {
+              userFriendlyError = `❌ Token "${token_symbol}" not found in the CoinGecko database. Please verify the token symbol is correct.`;
+            } else {
+              userFriendlyError = `❌ Error searching for "${token_symbol}": ${error.message}`;
+            }
+          }
+
+          console.log(`[fetchCoinId] Returning error:`, userFriendlyError);
+          return { error: true, message: userFriendlyError };
         }
       },
     },

@@ -12,9 +12,9 @@ export const chainImageMapping: { [key: string]: string } = {
 
 export const socialLinks = [
   {
-    name: "Medium",
-    href: "https://exyralabs.medium.com/",
-    icon: "/icons/medium.svg",
+    name: "Twitter",
+    href: "https://x.com/ExyraLabs",
+    icon: "/icons/twitter.svg",
   },
   {
     name: "Telegram",
@@ -22,13 +22,13 @@ export const socialLinks = [
     icon: "/icons/telegram.svg",
   },
   {
+    name: "Medium",
+    href: "https://exyralabs.medium.com/",
+    icon: "/icons/medium.svg",
+  },
+  {
     name: "Github",
     href: "https://github.com/ExyraLabs",
     icon: "/icons/github.svg",
-  },
-  {
-    name: "Twitter",
-    href: "https://x.com/ExyraLabs",
-    icon: "/icons/twitter.svg",
   },
 ];

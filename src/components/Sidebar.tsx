@@ -982,55 +982,82 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
               className="hidden lg:flex w-[95%] flex-col gap-1"
             >
               {isClient && chatRooms.length > 0 ? (
-                <>
-                  {groupedChatRooms.today.length > 0 && (
+                (() => {
+                  let totalShown = 0;
+                  const maxItems = 6;
+
+                  return (
                     <>
-                      <div
-                        suppressHydrationWarning
-                        className="text-[9px] text-[#8A8A8A] mb-2"
-                      >
-                        Today
-                      </div>
-                      {groupedChatRooms.today.map(([chatId]) => (
-                        <ChatItem key={chatId} chatId={chatId} />
-                      ))}
+                      {groupedChatRooms.today.length > 0 &&
+                        totalShown < maxItems && (
+                          <>
+                            <div
+                              suppressHydrationWarning
+                              className="text-[9px] text-[#8A8A8A] mb-2"
+                            >
+                              Today
+                            </div>
+                            {groupedChatRooms.today
+                              .slice(0, maxItems - totalShown)
+                              .map(([chatId]) => {
+                                totalShown++;
+                                return (
+                                  <ChatItem key={chatId} chatId={chatId} />
+                                );
+                              })}
+                          </>
+                        )}
+                      {groupedChatRooms.yesterday.length > 0 &&
+                        totalShown < maxItems && (
+                          <>
+                            <div className="text-[9px] text-[#8A8A8A] mb-2 mt-4">
+                              Yesterday
+                            </div>
+                            {groupedChatRooms.yesterday
+                              .slice(0, maxItems - totalShown)
+                              .map(([chatId]) => {
+                                totalShown++;
+                                return (
+                                  <ChatItem key={chatId} chatId={chatId} />
+                                );
+                              })}
+                          </>
+                        )}
+                      {groupedChatRooms.previous7Days.length > 0 &&
+                        totalShown < maxItems && (
+                          <>
+                            <div className="text-[9px] text-[#8A8A8A] mb-2 mt-4">
+                              Previous 7 Days
+                            </div>
+                            {groupedChatRooms.previous7Days
+                              .slice(0, maxItems - totalShown)
+                              .map(([chatId]) => {
+                                totalShown++;
+                                return (
+                                  <ChatItem key={chatId} chatId={chatId} />
+                                );
+                              })}
+                          </>
+                        )}
+                      {groupedChatRooms.previous30Days.length > 0 &&
+                        totalShown < maxItems && (
+                          <>
+                            <div className="text-[9px] text-[#8A8A8A] mb-2 mt-4">
+                              Previous 30 Days
+                            </div>
+                            {groupedChatRooms.previous30Days
+                              .slice(0, maxItems - totalShown)
+                              .map(([chatId]) => {
+                                totalShown++;
+                                return (
+                                  <ChatItem key={chatId} chatId={chatId} />
+                                );
+                              })}
+                          </>
+                        )}
                     </>
-                  )}
-                  {groupedChatRooms.yesterday.length > 0 && (
-                    <>
-                      <div className="text-[9px] text-[#8A8A8A] mb-2 mt-4">
-                        Yesterday
-                      </div>
-                      {groupedChatRooms.yesterday.map(([chatId]) => (
-                        <ChatItem key={chatId} chatId={chatId} />
-                      ))}
-                    </>
-                  )}
-                  {groupedChatRooms.previous7Days.length > 0 && (
-                    <>
-                      <div className="text-[9px] text-[#8A8A8A] mb-2 mt-4">
-                        Previous 7 Days
-                      </div>
-                      {groupedChatRooms.previous7Days
-                        .slice(0, 3)
-                        .map(([chatId]) => (
-                          <ChatItem key={chatId} chatId={chatId} />
-                        ))}
-                    </>
-                  )}
-                  {groupedChatRooms.previous30Days.length > 0 && (
-                    <>
-                      <div className="text-[9px] text-[#8A8A8A] mb-2 mt-4">
-                        Previous 30 Days
-                      </div>
-                      {groupedChatRooms.previous30Days
-                        .slice(0, 2)
-                        .map(([chatId]) => (
-                          <ChatItem key={chatId} chatId={chatId} />
-                        ))}
-                    </>
-                  )}
-                </>
+                  );
+                })()
               ) : (
                 <li suppressHydrationWarning className="text-xs text-gray-400">
                   {isClient ? "No chats yet." : "Loading..."}
@@ -1058,9 +1085,9 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                 </li>
               )}
             </ul>
-            {/* See all button for mobile - show only if there are more than 4 chats */}
+            {/* See all button for mobile - show only if there are more than 3 chats */}
             <div className="flex lg:hidden">
-              {isClient && chatRooms.length > 4 && (
+              {isClient && chatRooms.length > 3 && (
                 <button
                   className="text-[10px] text-[#D9D9D9] hover:text-white mt-3 underline"
                   onClick={() => setShowSearchModal(true)}

@@ -11,9 +11,9 @@ const WalletConnector = () => {
 
   const languages = [
     { code: "Eng", name: "English" },
-    { code: "Es", name: "Español" },
-    { code: "Fr", name: "Français" },
-    { code: "De", name: "Deutsch" },
+    // { code: "Es", name: "Español" },
+    // { code: "Fr", name: "Français" },
+    // { code: "De", name: "Deutsch" },
   ];
 
   const handleConnectWallet = () => {

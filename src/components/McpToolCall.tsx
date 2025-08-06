@@ -3,7 +3,7 @@
 import * as React from "react";
 
 interface ToolCallProps {
-  status: "complete" | "inProgress" | "executing";
+  status: "complete" | "inProgress" | "executing" | "failed";
   name?: string;
   //eslint-disable-next-line @typescript-eslint/no-explicit-any
   args?: any;
@@ -47,9 +47,11 @@ export default function MCPToolCall({
           <div
             className={`w-2 h-2 rounded-full ${
               status === "complete"
-                ? "bg-gray-300"
+                ? "bg-green-400"
+                : status === "failed"
+                ? "bg-red-400"
                 : status === "inProgress" || status === "executing"
-                ? "bg-gray-500 animate-pulse"
+                ? "bg-yellow-400 animate-pulse"
                 : "bg-gray-700"
             }`}
           />
@@ -67,10 +69,16 @@ export default function MCPToolCall({
             </div>
           )}
 
-          {status === "complete" && result && (
+          {(status === "complete" || status === "failed") && result && (
             <div>
-              <div className="text-gray-400 mb-2">Result:</div>
-              <pre className="whitespace-pre-wrap max-h-[200px] overflow-auto">
+              <div className="text-gray-400 mb-2">
+                {status === "failed" ? "Error:" : "Result:"}
+              </div>
+              <pre
+                className={`whitespace-pre-wrap max-h-[200px] overflow-auto ${
+                  status === "failed" ? "text-red-300" : ""
+                }`}
+              >
                 {format(result)}
               </pre>
             </div>

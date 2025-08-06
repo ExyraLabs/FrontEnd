@@ -59,72 +59,6 @@ const Page = () => {
   const { messages: contextMessages, setMessages } =
     useCopilotMessagesContext();
 
-  // Actively filter context messages to prevent corrupted tool calls
-  useEffect(() => {
-    if (contextMessages.length > 0) {
-      console.log(
-        "Context messages before filtering:",
-        contextMessages.map((msg, i) => ({
-          index: i,
-          id: msg.id,
-          type: (msg as BaseMessage)?.type || msg.constructor.name,
-          role: (msg as TextMessage)?.role,
-        }))
-      );
-
-      // Since we're not saving tool calls, only filter if there are actually orphaned tool calls
-      const orphanedToolCalls = contextMessages.filter((msg) => {
-        const messageType = (msg as BaseMessage)?.type || msg.constructor.name;
-
-        if (messageType === "ActionExecutionMessage") {
-          const actionMsg = msg as unknown as ActionExecutionMessage;
-          const hasResult = contextMessages.some((resultMsg) => {
-            const resultType =
-              (resultMsg as BaseMessage)?.type || resultMsg.constructor.name;
-            return (
-              resultType === "ResultMessage" &&
-              (resultMsg as unknown as ResultMessage).actionExecutionId ===
-                actionMsg.id
-            );
-          });
-          return !hasResult; // Return true if this is orphaned
-        }
-
-        if (messageType === "ResultMessage") {
-          const resultMsg = msg as unknown as ResultMessage;
-          const hasAction = contextMessages.some((actionMsg) => {
-            const actionType =
-              (actionMsg as BaseMessage)?.type || actionMsg.constructor.name;
-            return (
-              actionType === "ActionExecutionMessage" &&
-              (actionMsg as unknown as ActionExecutionMessage).id ===
-                resultMsg.actionExecutionId
-            );
-          });
-          return !hasAction; // Return true if this is orphaned
-        }
-
-        return false;
-      });
-
-      // Only filter if we find orphaned tool calls
-      if (orphanedToolCalls.length > 0) {
-        console.log(
-          `Found ${orphanedToolCalls.length} orphaned tool calls, filtering...`
-        );
-        const cleanContextMessages = contextMessages.filter((msg) => {
-          const messageType =
-            (msg as BaseMessage)?.type || msg.constructor.name;
-          return messageType === "TextMessage"; // Only keep text messages to be safe
-        });
-        console.log(
-          `Filtering context messages: ${contextMessages.length} -> ${cleanContextMessages.length}`
-        );
-        setMessages(cleanContextMessages);
-      }
-    }
-  }, [contextMessages, setMessages]);
-
   // const handleSendMessage = () => {
   //   console.log(id, "Chat-Id");
   // };
@@ -202,7 +136,35 @@ const Page = () => {
 
     if (messageType === "CombinedToolCall") {
       const toolCall = message as CombinedToolCall;
-      const isSuccess = toolCall.result?.status?.code === "Success";
+
+      // Check if the result contains error indicators
+      const resultContent = toolCall.result?.result || "";
+      let isError = false;
+
+      if (typeof resultContent === "string") {
+        // Check for our backend error patterns - comprehensive coverage
+        isError =
+          resultContent.includes("❌") ||
+          resultContent.includes("⚠️") ||
+          resultContent.includes("🔍") ||
+          resultContent.includes("🌐") ||
+          resultContent.includes("⏱️") ||
+          resultContent.includes("🔧") ||
+          resultContent.includes("Error") ||
+          resultContent.includes("error") ||
+          resultContent.includes("timeout") ||
+          resultContent.includes("failed") ||
+          resultContent.includes("not found") ||
+          resultContent.includes("couldn't find") ||
+          resultContent.includes("unable to");
+      } else if (typeof resultContent === "object" && resultContent !== null) {
+        // Check if it's an error object with error: true or success: false
+        isError =
+          (resultContent as Record<string, unknown>)?.error === true ||
+          (resultContent as Record<string, unknown>)?.success === false;
+      }
+
+      const isSuccess = toolCall.result?.status?.code === "Success" && !isError;
       const hasResult = !!toolCall.result;
 
       // Show loading state or result
@@ -426,7 +388,7 @@ const Page = () => {
       />
 
       <div
-        className="flex flex-col h-[78vh]   overflow-y-auto pr-2"
+        className="flex flex-col h-[78vh] scrollbar-hide   overflow-y-auto pr-2"
         style={{ minHeight: 0 }}
       >
         {displayMessages.map((message, idx) => {
