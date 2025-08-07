@@ -197,7 +197,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🔗 Links
 
-- **Documentation**: [docs.exyra.com](https://docs.exyra.ai)
+- **Documentation**: [docs.exyra.ai](https://docs.exyra.ai)
 - **Website**: [exyra.ai](https://exyra.ai)
 - **GitHub**: [github.com/ExyraLabs](https://github.com/ExyraLabs)
 - **Twitter**: [@ExyraLabs](https://x.com/ExyraLabs)
@@ -208,7 +208,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 For support and questions:
 - Create an issue on GitHub
 - Join our [Telegram community](https://t.me/ExyraLabs)
-- Check the [documentation](https://docs.exyra.ai)
+- Check the [Documentation](https://docs.exyra.ai)
 
 ---
 
