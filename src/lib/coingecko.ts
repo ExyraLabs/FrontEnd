@@ -1,5 +1,10 @@
 /**
- * CoinGecko API utilities
+ * CoinGecko API utilities with automatic retry mechanism
+ *
+ * All API calls include automatic retry with exponential backoff for:
+ * - Network timeouts and connection errors
+ * - Rate limiting (429 errors)
+ * - Server errors (5xx status codes)
  *
  * Environment Variables Required:
  * - NEXT_PUBLIC_COINGECKO_API_KEY: Your CoinGecko API key for authentication
@@ -7,6 +12,7 @@
  */
 
 import { TOKENS } from "@/constants/tokens";
+import { fetchWithRetry, COINGECKO_RETRY_OPTIONS } from "./retry";
 
 export interface CoinData {
   id: string;
@@ -14,6 +20,7 @@ export interface CoinData {
   name: string;
   platforms: Record<string, string>;
   decimals?: number;
+  tickers: unknown[];
 }
 
 export interface CoinDetailData {
@@ -37,6 +44,38 @@ export interface CoinDetailData {
   preview_listing: boolean;
   public_notice: string | null;
   additional_notices: string[];
+  tickers: Array<{
+    base: string;
+    target: string;
+    market: {
+      name: string;
+      identifier: string;
+      has_trading_incentive: boolean;
+    };
+    last: number;
+    volume: number;
+    converted_last: {
+      btc: number;
+      eth: number;
+      usd: number;
+    };
+    converted_volume: {
+      btc: number;
+      eth: number;
+      usd: number;
+    };
+    trust_score: string;
+    bid_ask_spread_percentage: number;
+    timestamp: string;
+    last_traded_at: string;
+    last_fetch_at: string;
+    is_anomaly: boolean;
+    is_stale: boolean;
+    trade_url: string;
+    token_info_url: string | null;
+    coin_id: string;
+    target_coin_id: string;
+  }>;
   description: {
     en: string;
   };
@@ -93,43 +132,74 @@ export function getCoinGeckoHeaders(): HeadersInit {
 }
 
 /**
+ * Fetch token price information by coin ID
+ */
+export async function fetchTokenPrice(coinId: string): Promise<{
+  price: number;
+  change24h: number;
+  marketCap: number;
+} | null> {
+  const url = `https://api.coingecko.com/api/v3/simple/price?ids=${coinId}&vs_currencies=usd&include_24hr_change=true&include_market_cap=true`;
+
+  const response = await fetchWithRetry(
+    url,
+    {
+      headers: getCoinGeckoHeaders(),
+    },
+    COINGECKO_RETRY_OPTIONS
+  );
+
+  const data = await response.json();
+
+  if (coinId in data) {
+    const priceData = data[coinId];
+    return {
+      price: priceData.usd,
+      change24h: priceData.usd_24h_change || 0,
+      marketCap: priceData.usd_market_cap || 0,
+    };
+  }
+
+  return null;
+}
+
+/**
  * Fetch detailed coin information by ID including decimal places
  */
 export async function fetchCoinDetails(
   coinId: string
 ): Promise<CoinDetailData | null> {
   console.log(`Fetching details for coin ID: ${coinId}`);
-  const response = await fetch(
-    `https://api.coingecko.com/api/v3/coins/${coinId}?localization=false&tickers=false&market_data=false&community_data=false&developer_data=false&sparkline=false`,
+
+  const response = await fetchWithRetry(
+    `https://api.coingecko.com/api/v3/coins/${coinId}?localization=false&tickers=true&market_data=false&community_data=false&developer_data=false&sparkline=false`,
     {
       headers: getCoinGeckoHeaders(),
-    }
+    },
+    COINGECKO_RETRY_OPTIONS
   );
 
-  if (!response.ok) {
-    if (response.status === 404) {
-      return null;
-    }
-    throw new Error(`CoinGecko API error: ${response.status}`);
+  if (response.status === 404) {
+    return null;
   }
 
-  return response.json();
+  const res = await response.json();
+  console.log(res.tickers[0].market, "coinDetails");
+
+  return res;
 }
 
 /**
  * Fetch all coins from CoinGecko API with platform information
  */
 export async function fetchAllCoins(): Promise<CoinData[]> {
-  const response = await fetch(
+  const response = await fetchWithRetry(
     "https://api.coingecko.com/api/v3/coins/list?include_platform=true",
     {
       headers: getCoinGeckoHeaders(),
-    }
+    },
+    COINGECKO_RETRY_OPTIONS
   );
-
-  if (!response.ok) {
-    throw new Error(`CoinGecko API error: ${response.status}`);
-  }
 
   return response.json();
 }
@@ -165,6 +235,14 @@ export async function findCoinsBySymbolWithDecimals(
  * Find coins by symbol
  */
 export async function findCoinsBySymbol(symbol: string): Promise<CoinData[]> {
+  // First check TOKENS for the symbol
+  const localMatches = TOKENS.filter(
+    (coin) => coin.symbol.toLowerCase() === symbol.toLowerCase()
+  );
+  if (localMatches.length > 0) {
+    return localMatches;
+  }
+  // Fallback to API if not found locally
   const allCoins = await fetchAllCoins();
   return allCoins.filter(
     (coin) => coin.symbol.toLowerCase() === symbol.toLowerCase()
@@ -210,6 +288,7 @@ export async function findCoinByIdWithDecimals(
     symbol: coinDetails.symbol,
     name: coinDetails.name,
     platforms: coinDetails.platforms,
+    tickers: coinDetails.tickers || [],
     decimals,
   };
 }
@@ -218,6 +297,12 @@ export async function findCoinByIdWithDecimals(
  * Find a specific coin by ID
  */
 export async function findCoinById(coinId: string): Promise<CoinData | null> {
+  // First check TOKENS for the id
+  const localMatch = TOKENS.find((coin) => coin.id === coinId);
+  if (localMatch) {
+    return localMatch;
+  }
+  // Fallback to API if not found locally
   const allCoins = await fetchAllCoins();
   return allCoins.find((coin) => coin.id === coinId) || null;
 }
@@ -251,6 +336,14 @@ export async function searchCoinsByNameWithDecimals(
 export async function searchCoinsByName(
   searchTerm: string
 ): Promise<CoinData[]> {
+  // First check TOKENS for the name
+  const localMatches = TOKENS.filter((coin) =>
+    coin.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+  if (localMatches.length > 0) {
+    return localMatches;
+  }
+  // Fallback to API if not found locally
   const allCoins = await fetchAllCoins();
   return allCoins.filter((coin) =>
     coin.name.toLowerCase().includes(searchTerm.toLowerCase())

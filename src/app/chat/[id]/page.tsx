@@ -4,6 +4,8 @@ import MarkdownRenderer from "@/components/MarkdownRenderer";
 import { ToolRenderer } from "@/components/ToolRenderer";
 import { useChatRoomsMessages } from "@/hooks/useChatRoomsMessages";
 import { useSavedPrompts } from "@/hooks/useSavedPrompts";
+import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
+import Toast from "@/components/Toast";
 import { useAppKitAccount } from "@reown/appkit/react";
 import Image from "next/image";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
@@ -20,15 +22,17 @@ import {
   useCopilotMessagesContext,
 } from "@copilotkit/react-core";
 import { BaseMessage, CombinedToolCall } from "../../../../types";
+import Uniswap from "@/agents/Uniswap";
+import McpServerManager from "@/components/McpServerManager";
+import Curve from "@/agents/Curve";
+import AlchemyAgent from "@/agents/Alchemy";
+import dynamic from "next/dynamic";
 
-const examples = [
-  "How can I get started?",
-  "Tell me more about DeFi",
-  "How can I earn rewards?",
-];
+const Lido = dynamic(() => import("@/agents/Lido"), {
+  ssr: false,
+});
 
 const Page = () => {
-  const [showDefiOptions, setShowDefiOptions] = useState(false);
   const [inputValue, setInputValue] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { address } = useAppKitAccount();
@@ -41,7 +45,12 @@ const Page = () => {
   const { getMessages, saveChatRoomMessages } = useChatRoomsMessages();
   const { savePrompt, isPromptSaved, loadSavedPrompts, deletePromptByContent } =
     useSavedPrompts();
-  const [savedPrompts, setSavedPrompts] = useState<Set<string>>(new Set());
+  const [, setSavedPrompts] = useState<Set<string>>(new Set());
+  const [copiedMessages, setCopiedMessages] = useState<Set<string>>(new Set());
+  const { copyToClipboard, isError, message } = useCopyToClipboard({
+    timeout: 2000,
+    successMessage: "Copied to clipboard!",
+  });
   const messages = getMessages(id);
   const { visibleMessages, appendMessage, isLoading } = useCopilotChat({
     id: id,
@@ -56,8 +65,7 @@ const Page = () => {
   //   `Chat ID: ${id}, Messages loaded: ${messages.length}, Visible messages: ${visibleMessages.length}`
   // );
 
-  const { messages: contextMessages, setMessages } =
-    useCopilotMessagesContext();
+  const { setMessages } = useCopilotMessagesContext();
 
   // const handleSendMessage = () => {
   //   console.log(id, "Chat-Id");
@@ -130,12 +138,62 @@ const Page = () => {
 
   const displayMessages = getDisplayMessages();
 
+  // Tool icon mapping based on tool name
+  const getToolIcon = (toolName: string): string | null => {
+    const toolIconMapping: Record<string, string> = {
+      // CoinGecko tools
+      getTokenPriceById: "/icons/gecko.png",
+      fetchCoinId: "/icons/gecko.png",
+      getCoinDetails: "/icons/gecko.png",
+      searchCoinsByName: "/icons/gecko.png",
+      getContractAddress: "/icons/gecko.png",
+      getTokenDecimals: "/icons/gecko.png",
+      getAvailablePlatforms: "/icons/gecko.png",
+
+      // Uniswap tools
+      swapTokens: "/icons/uniswap.png",
+
+      // Lido tools
+      getLidoContractAddress: "/icons/Lido.png",
+      getLidoBalances: "/icons/Lido.png",
+      lidoStakeOperations: "/icons/Lido.png",
+      lidoWrapOperations: "/icons/Lido.png",
+      lidoStatistics: "/icons/Lido.png",
+      lidoConversions: "/icons/Lido.png",
+      lidoTokenOperations: "/icons/Lido.png",
+      lidoRpcConfiguration: "/icons/Lido.png",
+      lidoOverview: "/icons/Lido.png",
+      lidoStake: "/icons/Lido.png",
+      stakeETH: "/icons/Lido.png",
+
+      // KyberSwap tools
+      kyberSwap: "/icons/kyber.png",
+      getKyberRates: "/icons/kyber.png",
+
+      // Curve tools
+      curve: "/icons/curve.jpeg",
+      curveTokens: "/icons/curve.jpeg",
+
+      // Generic DeFi tools
+      swap: "/icons/swap.svg",
+      stake: "/icons/stake.svg",
+      lend: "/icons/lend.svg",
+
+      getAccountBalance: "/icons/alchemy.svg",
+
+      // Add more tool mappings as needed
+    };
+
+    return toolIconMapping[toolName] || null;
+  };
+
   const renderToolMessage = (message: BaseMessage, index: number) => {
     const messageType =
       (message as BaseMessage)?.type || message.constructor.name;
 
     if (messageType === "CombinedToolCall") {
       const toolCall = message as CombinedToolCall;
+      const toolIcon = getToolIcon(toolCall.name);
 
       // Check if the result contains error indicators
       const resultContent = toolCall.result?.result || "";
@@ -145,11 +203,6 @@ const Page = () => {
         // Check for our backend error patterns - comprehensive coverage
         isError =
           resultContent.includes("❌") ||
-          resultContent.includes("⚠️") ||
-          resultContent.includes("🔍") ||
-          resultContent.includes("🌐") ||
-          resultContent.includes("⏱️") ||
-          resultContent.includes("🔧") ||
           resultContent.includes("Error") ||
           resultContent.includes("error") ||
           resultContent.includes("timeout") ||
@@ -175,6 +228,15 @@ const Page = () => {
             className="flex items-center gap-2 mb-2 text-gray-400 text-sm"
           >
             <div className="w-3 h-3 border border-gray-400 border-t-transparent rounded-full animate-spin"></div>
+            {toolIcon && (
+              <Image
+                src={toolIcon}
+                alt={`${toolCall.name} icon`}
+                width={16}
+                height={16}
+                className="rounded-sm"
+              />
+            )}
             <span>Running {toolCall.name}...</span>
           </div>
         );
@@ -185,11 +247,26 @@ const Page = () => {
           key={`tool-${message.id}-${index}`}
           className="flex items-center gap-2 mb-2 text-gray-300 text-sm"
         >
-          <span className={isSuccess ? "text-green-400" : "text-red-400"}>
+          <span
+            className={
+              isSuccess
+                ? "text-green-400 text-[8px]"
+                : "text-red-400 text-[8px]"
+            }
+          >
             {isSuccess ? "✓" : "✗"}
           </span>
+          {toolIcon && (
+            <Image
+              src={toolIcon}
+              alt={`${toolCall.name} icon`}
+              width={16}
+              height={16}
+              className="rounded-sm"
+            />
+          )}
           <span>
-            {isSuccess ? "Completed" : "Failed"} {toolCall.name}
+            {toolCall.name}
             {/* {toolCall.result?.result && isSuccess && (
               <span className="text-gray-400">
                 {" "}
@@ -210,6 +287,8 @@ const Page = () => {
     const isUser = textMessage.role === Role.User;
     const messageContent = textMessage.content || "";
     const promptIsSaved = isUser && isPromptSaved(messageContent);
+    const messageId = message.id || `message-${index}`;
+    const isMessageCopied = copiedMessages.has(messageId);
 
     const handleSavePrompt = () => {
       if (promptIsSaved) {
@@ -226,6 +305,20 @@ const Page = () => {
         setSavedPrompts((prev) => new Set([...prev, messageContent.trim()]));
         console.log("Prompt saved!");
       }
+    };
+
+    const handleCopyMessage = async () => {
+      await copyToClipboard(messageContent);
+      // Add this message to copied messages set
+      setCopiedMessages((prev) => new Set([...prev, messageId]));
+      // Remove from copied messages after 2 seconds
+      setTimeout(() => {
+        setCopiedMessages((prev) => {
+          const newSet = new Set(prev);
+          newSet.delete(messageId);
+          return newSet;
+        });
+      }, 2000);
     };
 
     return (
@@ -275,13 +368,35 @@ const Page = () => {
             </button>
           )}
           {!isLoading && (
-            <button className="cursor-pointer">
-              <Image
-                src={"/icons/copy.svg"}
-                width={16}
-                height={16}
-                alt="copy"
-              />
+            <button
+              className="cursor-pointer hover:opacity-70 transition-opacity flex items-center justify-center relative w-4 h-4"
+              onClick={handleCopyMessage}
+              title="Copy message"
+            >
+              {isMessageCopied ? (
+                <motion.div
+                  initial={{ scale: 0, rotate: -90 }}
+                  animate={{ scale: 1, rotate: 0 }}
+                  exit={{ scale: 0, rotate: 90 }}
+                  transition={{
+                    type: "spring",
+                    stiffness: 400,
+                    damping: 15,
+                    duration: 0.3,
+                  }}
+                  className="text-green-400 text-xs font-bold flex items-center justify-center"
+                  style={{ fontSize: "12px" }}
+                >
+                  ✓
+                </motion.div>
+              ) : (
+                <Image
+                  src={"/icons/copy.svg"}
+                  width={16}
+                  height={16}
+                  alt="copy"
+                />
+              )}
             </button>
           )}
         </div>
@@ -289,21 +404,21 @@ const Page = () => {
     );
   };
   // console.log(messages, " Messages");
-  console.log(visibleMessages, "Visible Messages");
-  console.log(displayMessages, "Display Messages");
+  // console.log(visibleMessages, "Visible Messages");
+  // console.log(displayMessages, "Display Messages");
 
   // Debug: Log message types to understand the structure
-  console.log(
-    "Message types:",
-    visibleMessages.map((msg, i) => ({
-      index: i,
-      id: msg.id,
-      type: (msg as BaseMessage)?.type || msg.constructor.name,
-      role: (msg as TextMessage)?.role,
-      actionId: (msg as unknown as ActionExecutionMessage)?.id,
-      resultActionId: (msg as unknown as ResultMessage)?.actionExecutionId,
-    }))
-  );
+  // console.log(
+  //   "Message types:",
+  //   visibleMessages.map((msg, i) => ({
+  //     index: i,
+  //     id: msg.id,
+  //     type: (msg as BaseMessage)?.type || msg.constructor.name,
+  //     role: (msg as TextMessage)?.role,
+  //     actionId: (msg as unknown as ActionExecutionMessage)?.id,
+  //     resultActionId: (msg as unknown as ResultMessage)?.actionExecutionId,
+  //   }))
+  // );
   // console.log(ContextMessages, "Context Messages");
 
   useEffect(() => {
@@ -387,6 +502,14 @@ const Page = () => {
         onClose={() => setShowModal(false)}
       />
 
+      {/* Toast for copy error feedback */}
+      <Toast
+        isVisible={isError}
+        message={message || "Failed to copy"}
+        type="error"
+        position="top"
+      />
+
       <div
         className="flex flex-col h-[78vh] scrollbar-hide   overflow-y-auto pr-2"
         style={{ minHeight: 0 }}
@@ -413,7 +536,6 @@ const Page = () => {
         {isLoading && (
           <div className="flex flex-col w-max max-w-[600px] self-start">
             <div className="flex items-center gap-3 py-4">
-              <span className="text-[#888888] text-sm">AI is thinking</span>
               <div className="flex items-center gap-1">
                 <motion.div
                   className="w-2 h-2 bg-[#A9A0FF] rounded-full"
@@ -554,6 +676,10 @@ const Page = () => {
       </motion.div>
 
       <ToolRenderer />
+      <Uniswap />
+      <Lido />
+      <AlchemyAgent />
+      {/* <Curve /> */}
     </div>
   );
 };

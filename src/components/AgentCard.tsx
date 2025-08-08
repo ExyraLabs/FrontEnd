@@ -1,6 +1,8 @@
 import React from "react";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { chainImageMapping } from "@/utils/constants";
+import { useChatRoomsMessages } from "../hooks/useChatRoomsMessages";
 
 interface AgentCardProps {
   icon: string;
@@ -19,6 +21,35 @@ const AgentCard: React.FC<AgentCardProps> = ({
   prompts,
   chains,
 }) => {
+  const router = useRouter();
+  const { createChatRoom, loadChatRooms } = useChatRoomsMessages();
+
+  // Helper to generate a proper uuid (RFC4122 v4)
+  function generateUUID() {
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(
+      /[xy]/g,
+      function (c) {
+        const r = (Math.random() * 16) | 0;
+        const v = c === "x" ? r : (r & 0x3) | 0x8;
+        return v.toString(16);
+      }
+    );
+  }
+
+  const handlePromptClick = (prompt: string) => {
+    let chatId = generateUUID();
+    const chatRooms = loadChatRooms();
+    // Ensure unique chatId
+    while (chatRooms[chatId]) {
+      chatId = generateUUID();
+    }
+
+    // Create empty chat room without any messages
+    createChatRoom(chatId, "");
+
+    // Navigate to chat with prompt as URL parameter
+    router.push(`/chat/${chatId}?prompt=${encodeURIComponent(prompt)}`);
+  };
   return (
     <div className="bg-[#303131]  hover:border-white duration-1000 rounded-[16px] p-4 flex flex-col min-h-[350px] shadow-md border-[0.5px] border-[#303131]">
       {/* Header */}
@@ -68,7 +99,7 @@ const AgentCard: React.FC<AgentCardProps> = ({
         </ul>
       </div>
       {/* Prompts */}
-      <div className="h-[45%] mt-3">
+      <div className="h-[45%] flex flex-col justify-end">
         <div className="text-[#9B9D9D] text-xs font-semibold mb-2">
           Suggested Prompts
         </div>
@@ -76,7 +107,8 @@ const AgentCard: React.FC<AgentCardProps> = ({
           {prompts.map((prompt, idx) => (
             <button
               key={idx}
-              className="flex cursor-pointer items-center gap-2 bg-[#262727] hover:bg-[#232323] rounded-[8px] px-3 py-2"
+              onClick={() => handlePromptClick(prompt)}
+              className="flex cursor-pointer items-center gap-2 bg-[#262727] hover:bg-[#232323] rounded-[8px] px-3 py-2 transition-colors duration-200"
             >
               <span className="text-primary">
                 <svg

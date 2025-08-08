@@ -1,19 +1,18 @@
 "use client";
 import Image from "next/image";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import AgentCard from "@/components/AgentCard";
 import { chainImageMapping } from "@/utils/constants";
+import { useCopilotMessagesContext } from "@copilotkit/react-core";
 
 const TABS = [
   "All",
-  "Execution",
-  "Research",
   "Swap",
-  // "Buy PT/VT",
+  "Stake",
   "Lend",
   "Bridge",
   "Provide LP",
-  "Stake",
+  "Research",
 ];
 
 const CHAINS = [
@@ -32,6 +31,7 @@ const AGENT_CARDS = [
     icon: "/icons/Lido.png",
     title: "Lido Finance",
     subtitle: "Liquid staking for Ethereum",
+    category: "Stake",
     features: [
       "Earn staking rewards on your ETH",
       "Participate in DeFi with stETH",
@@ -47,6 +47,7 @@ const AGENT_CARDS = [
     icon: "/icons/uniswap.png",
     title: "Uniswap",
     subtitle: "Decentralized exchange for swapping tokens",
+    category: "Swap",
     features: [
       // "Swap any ERC-20 token instantly",
       "Provide liquidity and earn fees",
@@ -54,8 +55,8 @@ const AGENT_CARDS = [
     ],
     prompts: [
       // "Swap 10 USDC to ETH",
-      "Show me top pools on Uniswap",
-      "Provide liquidity for ETH/USDC",
+      "Swap $4 worth of ETH for SKYOPS token for me",
+      "Swap 0.0002ETH to USDT",
     ],
     chains: ["Ethereum", "Arbitrum", "Optimism"],
   },
@@ -63,6 +64,7 @@ const AGENT_CARDS = [
     icon: "/icons/kyber.png",
     title: "KyberSwap",
     subtitle: "Multi-chain DEX aggregator",
+    category: "Swap",
     features: [
       "Find best token swap rates across chains",
       "Swap tokens on Ethereum, BSC, Polygon, and more",
@@ -75,15 +77,127 @@ const AGENT_CARDS = [
     ],
     chains: ["Ethereum", "BNB Smart Chain", "Base"],
   },
+  {
+    icon: "/icons/gecko.png",
+    title: "CoinGecko",
+    subtitle: "Your go-to source for crypto market data",
+    category: "Research",
+    features: [
+      "Track price movements of your favorite coins",
+      "Get real-time market data and charts",
+      "Compare different cryptocurrencies",
+    ],
+    prompts: [
+      "What is the current price of Bitcoin?",
+      "What is the market cap of Ethereum?",
+    ],
+    chains: ["Ethereum", "BNB Smart Chain", "Base"],
+  },
+  // {
+  //   icon: "/icons/curve.jpeg",
+  //   title: "Curve Finance",
+  //   subtitle: "Efficient stablecoin and like-asset trading",
+  //   category: "Swap",
+  //   features: [
+  //     "Trade stablecoins with minimal slippage",
+  //     "Provide liquidity to earn trading fees",
+  //     "Access deep liquidity for stable assets",
+  //   ],
+  //   prompts: [
+  //     "Show me available Curve pools",
+  //     "Provide liquidity to the 3pool",
+  //   ],
+  //   chains: ["Ethereum", "Arbitrum", "Optimism"],
+  // },
+  {
+    icon: "/icons/alchemy.svg",
+    title: "Alchemy SDK",
+    subtitle: "Powerful blockchain data and infrastructure",
+    category: "Research",
+    features: [
+      "Access comprehensive blockchain data",
+      "Get real-time transaction information",
+      "Query NFT metadata and ownership",
+    ],
+    prompts: [
+      "Get my wallet's transaction history",
+      // "Show me NFTs in my wallet",
+      "Check the balance of my address",
+    ],
+    chains: ["Ethereum", "Arbitrum", "Optimism", "Solana"],
+  },
+  {
+    icon: "/icons/curve.jpeg",
+    title: "Curve Finance",
+    subtitle: "Efficient stablecoin and like-asset trading",
+    category: "Provide LP",
+    features: [
+      "Trade stablecoins with minimal slippage",
+      "Provide liquidity to earn trading fees",
+      "Access deep liquidity for stable assets",
+    ],
+    prompts: [
+      "Show me available Curve pools",
+      "Provide liquidity to the 3pool",
+    ],
+    chains: ["Ethereum", "Arbitrum", "Optimism"],
+  },
+  {
+    icon: "/icons/bridge.svg",
+    title: "Cross-Chain Bridge",
+    subtitle: "Bridge assets across different blockchains",
+    category: "Bridge",
+    features: [
+      "Bridge tokens between Ethereum and Layer 2s",
+      "Support for multiple chains",
+      "Secure cross-chain transfers",
+    ],
+    prompts: [
+      "Bridge 0.1 ETH from Ethereum to Arbitrum",
+      "What are the bridge fees for USDC?",
+    ],
+    chains: ["Ethereum", "Arbitrum", "Optimism", "Base"],
+  },
+  {
+    icon: "/icons/lend.svg",
+    title: "Aave Protocol",
+    subtitle: "Decentralized lending and borrowing platform",
+    category: "Lend",
+    features: [
+      "Lend crypto assets to earn interest",
+      "Borrow against your collateral",
+      "Access flash loans",
+    ],
+    prompts: ["Lend 100 USDC on Aave", "What are the current lending rates?"],
+    chains: ["Ethereum", "Arbitrum", "Optimism"],
+  },
 ];
 
 const Explore = () => {
   const [activeTab, setActiveTab] = useState("All");
   const [selectedChain, setSelectedChain] = useState("All Chains");
   const [showChainDropdown, setShowChainDropdown] = useState(false);
+  const { setMessages } = useCopilotMessagesContext();
 
   // Repeat cards to fill the grid as in the screenshot
   const cards = [...AGENT_CARDS];
+
+  // Filter cards based on active tab and selected chain
+  const filteredCards = cards.filter((card) => {
+    // Filter by category/tab
+    const matchesTab = activeTab === "All" || card.category === activeTab;
+
+    // Filter by chain
+    const matchesChain =
+      selectedChain === "All Chains" || card.chains.includes(selectedChain);
+
+    return matchesTab && matchesChain;
+  });
+
+  useEffect(() => {
+    setMessages([]);
+    //eslint-disable-next-line
+  }, []);
 
   return (
     <div className="flex flex-col px-4 overflow-y-scroll w-full">
@@ -186,15 +300,16 @@ const Explore = () => {
           {/* Clear Filters */}
           <button
             className={`text-xs transition-colors w-full md:w-auto text-center ${
-              selectedChain === "All Chains"
+              selectedChain === "All Chains" && activeTab === "All"
                 ? "text-[#3A3B3B] cursor-default"
                 : "text-[#B5B5B5] hover:text-white cursor-pointer"
             }`}
             onClick={() => {
               if (selectedChain !== "All Chains")
                 setSelectedChain("All Chains");
+              if (activeTab !== "All") setActiveTab("All");
             }}
-            disabled={selectedChain === "All Chains"}
+            disabled={selectedChain === "All Chains" && activeTab === "All"}
           >
             Clear Filters
           </button>
@@ -203,9 +318,18 @@ const Explore = () => {
 
       {/* Cards grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-        {cards.map((card, idx) => (
-          <AgentCard key={idx} {...card} />
-        ))}
+        {filteredCards.length > 0 ? (
+          filteredCards.map((card, idx) => <AgentCard key={idx} {...card} />)
+        ) : (
+          <div className="col-span-full text-center py-12">
+            <p className="text-[#99A0AE] text-lg">
+              No agents found matching your filters.
+            </p>
+            <p className="text-[#99A0AE] text-sm mt-2">
+              Try adjusting your category or chain selection.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
