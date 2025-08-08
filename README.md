@@ -5,7 +5,7 @@ An intelligent AI-powered chat platform that helps users navigate and interact w
 ## 🚀 Features
 
 - **🤖 AI-Powered Chat**: Intelligent DeFi assistant powered by CopilotKit
-- **🔗 Multi-Chain Support**: Ethereum, Arbitrum, Optimism, BSC, Solana, and more
+- **🔗 Multi-Chain Support**: Ethereum, Arbitrum, Optimism, BSC, Solana and more
 - **💼 Wallet Integration**: Seamless wallet connection with AppKit/WalletConnect
 - **🏦 DeFi Protocol Explorer**: Discover and interact with leading DeFi protocols:
   - **Lido Finance**: Liquid staking for Ethereum
@@ -14,7 +14,7 @@ An intelligent AI-powered chat platform that helps users navigate and interact w
   - **Pendle Finance**: Yield trading and fixed returns
 - **💬 Smart Conversations**: Context-aware chat with saved prompts and search
 - **📱 Responsive Design**: Beautiful, modern interface that works on all devices
-- **⚡ Real-time Updates**: Live token prices, gas estimates, and market data
+- **⚡ Real-time Updates**: Live token prices, gas estimates and market data
 
 ## 🛠 Tech Stack
 
@@ -120,7 +120,7 @@ The app uses AppKit (WalletConnect v2) for wallet connections. To set up:
 
 ### AI Chat Assistant
 - Natural language interface for DeFi interactions
-- Context-aware responses about protocols, yields, and strategies
+- Context-aware responses about protocols, yields and strategies
 - Real-time data integration for accurate information
 
 ### Multi-Chain Support
@@ -197,7 +197,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🔗 Links
 
-- **Documentation**: [docs.exyra.com](https://docs.exyra.com)
+- **Documentation**: [docs.exyra.ai](https://docs.exyra.ai)
 - **Website**: [exyra.ai](https://exyra.ai)
 - **GitHub**: [github.com/ExyraLabs](https://github.com/ExyraLabs)
 - **Twitter**: [@ExyraLabs](https://x.com/ExyraLabs)
@@ -208,7 +208,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 For support and questions:
 - Create an issue on GitHub
 - Join our [Telegram community](https://t.me/ExyraLabs)
-- Check the [documentation](https://docs.exyra.com)
+- Check the [Documentation](https://docs.exyra.ai)
 
 ---
 
