@@ -184,7 +184,7 @@ export async function fetchCoinDetails(
   }
 
   const res = await response.json();
-  console.log(res.tickers[0].market, "coinDetails");
+  // console.log(res.tickers[0].market, "coinDetails");
 
   return res;
 }
@@ -467,3 +467,5 @@ export async function getAvailablePlatforms(symbol: string): Promise<string[]> {
 
   return Array.from(platforms);
 }
+
+// fetchCoinDetails("skyops").then((res) => console.log(res, "skyops details"));

@@ -141,12 +141,12 @@ const Uniswap = () => {
       if (isInputETH && !isOutputETH) {
         // ETH -> Token: swapExactETHForTokens
         calls = [
-          {
-            to: tokenIn.address as `0x${string}`,
-            abi: ERC20_ABI,
-            functionName: "approve",
-            args: [ROUTER_ADDRESS_V2, maxApproval],
-          },
+          // {
+          //   to: tokenIn.address as `0x${string}`,
+          //   abi: ERC20_ABI,
+          //   functionName: "approve",
+          //   args: [ROUTER_ADDRESS_V2, maxApproval],
+          // },
           {
             to: ROUTER_ADDRESS_V2 as `0x${string}`,
             abi: ROUTER_ABI_V2,
@@ -285,6 +285,7 @@ const Uniswap = () => {
       tokenOutSymbol: "ETH",
       amount: "7580",
       platform: "ethereum",
+      slippage: "4000", // 40% slippage
     });
     console.log("✅ Swap result:", swapResult);
   };

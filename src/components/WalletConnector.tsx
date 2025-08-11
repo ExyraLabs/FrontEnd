@@ -2,12 +2,36 @@
 import { useAppKit, useAppKitAccount } from "@reown/appkit/react";
 import Image from "next/image";
 import React, { useState } from "react";
+import WalletManagementModal from "./WalletManagementModal";
+import { useWalletAssets } from "../hooks/useWalletAssets";
 
 const WalletConnector = () => {
   const [selectedLanguage, setSelectedLanguage] = useState("Eng");
   const [isLanguageDropdownOpen, setIsLanguageDropdownOpen] = useState(false);
+  const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
   const { address } = useAppKitAccount();
   const { open } = useAppKit();
+
+  // Use the custom hook to fetch real wallet assets
+  const { assets, totalBalance, loading, error } = useWalletAssets();
+
+  console.log(assets, "assets");
+  // Close modals when clicking outside
+  React.useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest(".wallet-connector-container")) {
+        setIsLanguageDropdownOpen(false);
+        setIsWalletModalOpen(false);
+      }
+    };
+
+    if (isLanguageDropdownOpen || isWalletModalOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () =>
+        document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [isLanguageDropdownOpen, isWalletModalOpen]);
 
   const languages = [
     { code: "Eng", name: "English" },
@@ -17,8 +41,13 @@ const WalletConnector = () => {
   ];
 
   const handleConnectWallet = () => {
-    // TODO: Implement wallet connection logic
-    open();
+    if (address) {
+      // If wallet is connected, show wallet management modal
+      setIsWalletModalOpen(true);
+    } else {
+      // If wallet is not connected, open connection modal
+      open();
+    }
     console.log("Connect wallet clicked");
   };
 
@@ -28,7 +57,7 @@ const WalletConnector = () => {
   };
 
   return (
-    <div className="flex bg-[#303131]  rounded-full py-2  lg:py-2  gap-2 lg:gap-6 pr-[13px] pl-[13px] items-center justify-between">
+    <div className="flex bg-[#303131] z-50 relative wallet-connector-container  rounded-[20px] py-2  lg:py-2  gap-2 lg:gap-6 pr-[13px] pl-[13px] items-center justify-between">
       {/* Language Selector */}
       <div className="relative">
         <button
@@ -106,6 +135,17 @@ const WalletConnector = () => {
             : "Connect"}
         </span>
       </button>
+      {/* Wallet Management Modal */}
+      <WalletManagementModal
+        isOpen={isWalletModalOpen}
+        onClose={() => setIsWalletModalOpen(false)}
+        address={address || ""}
+        totalBalance={totalBalance}
+        assets={assets}
+        streakDays={0}
+        loading={loading}
+        error={error}
+      />
     </div>
   );
 };

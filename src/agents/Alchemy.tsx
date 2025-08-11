@@ -20,7 +20,8 @@ const AlchemyAgent = () => {
   // Basic account balance check
   useCopilotAction({
     name: "getAccountBalance",
-    description: "Get ERC-20 balance for a wallet address using Alchemy SDK.",
+    description:
+      "Get ERC-20 balance for a wallet address using Alchemy SDK.Ideally fetch balance for a specific token from the users connected wallet if not wallet address is specified",
     parameters: [
       {
         name: "contractAddress",

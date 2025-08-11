@@ -8,6 +8,7 @@ import {
 import { parseUnits, formatUnits, type PublicClient } from "viem";
 import { ethers } from "ethers";
 import { ERC20_ABI } from "../constants/swap";
+import { JSBI } from "@uniswap/sdk";
 
 // Type for window.ethereum
 // declare global {
@@ -229,9 +230,25 @@ export async function getSigner(): Promise<ethers.Signer | null> {
   // Method 1: Using window.ethereum (MetaMask/injected wallet)
   if (typeof window !== "undefined" && window.ethereum) {
     try {
-      // Request account access
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
-      return await provider.getSigner();
+      // First, request account access if needed
+      const ethereum = window.ethereum as {
+        request: (args: {
+          method: string;
+          params?: unknown[];
+        }) => Promise<unknown>;
+      };
+      await ethereum.request({ method: "eth_requestAccounts" });
+
+      // Create provider and get signer
+      const provider = new ethers.providers.Web3Provider(
+        window.ethereum as ethers.providers.ExternalProvider
+      );
+      const signer = provider.getSigner();
+
+      // Test that we can get the address (this will throw if no account is connected)
+      await signer.getAddress();
+
+      return signer;
     } catch (error) {
       console.error("Error getting signer from injected wallet:", error);
     }
@@ -249,6 +266,7 @@ export async function getSigner(): Promise<ethers.Signer | null> {
 
 // Simple ethers.js token approval function
 export async function getTokenApprovalEthers(
+  userAddress: string,
   tokenContractAddress: string,
   spenderAddress: string,
   spendingAmount: string | number,
@@ -260,6 +278,13 @@ export async function getTokenApprovalEthers(
   error?: Error;
 }> {
   try {
+    // Validate contract address
+    if (!ethers.utils.isAddress(tokenContractAddress)) {
+      throw new Error(
+        `Invalid token contract address: ${tokenContractAddress}`
+      );
+    }
+
     // Get signer if not provided
     const actualSigner = signer || (await getSigner());
     if (!actualSigner) {
@@ -274,22 +299,34 @@ export async function getTokenApprovalEthers(
       "function symbol() view returns (string)",
     ];
 
-    // Create contract instance
+    // Get the provider from the signer
+    const provider = actualSigner.provider;
+    if (!provider) {
+      throw new Error("Signer does not have a provider");
+    }
+
+    // Create contract instance for reading (connected to provider)
+    const tokenContractRead = new ethers.Contract(
+      tokenContractAddress,
+      erc20Abi,
+      provider
+    );
+
+    // Create contract instance for writing (connected to signer)
     const tokenContract = new ethers.Contract(
       tokenContractAddress,
       erc20Abi,
       actualSigner
     );
 
-    // Get token info
-    const [decimals, symbol, userAddress] = await Promise.all([
-      tokenContract.decimals(),
-      tokenContract.symbol(),
-      actualSigner.getAddress(),
+    // Get token info using the read contract
+    const [decimals, symbol] = await Promise.all([
+      tokenContractRead.decimals(),
+      tokenContractRead.symbol(),
     ]);
 
-    // Get current allowance
-    const currentAllowance = await tokenContract.allowance(
+    // Get current allowance using the read contract
+    const currentAllowance = await tokenContractRead.allowance(
       userAddress,
       spenderAddress
     );
@@ -355,4 +392,23 @@ export async function getSignerFromWagmi(): Promise<ethers.Signer | null> {
     console.error("Error getting signer from wagmi:", error);
   }
   return null;
+}
+
+export function countDecimals(x: number) {
+  if (Math.floor(x) === x) {
+    return 0;
+  }
+  return x.toString().split(".")[1].length || 0;
+}
+
+export function fromReadableAmount(amount: number, decimals: number): JSBI {
+  const extraDigits = Math.pow(10, countDecimals(amount));
+  const adjustedAmount = amount * extraDigits;
+  return JSBI.divide(
+    JSBI.multiply(
+      JSBI.BigInt(adjustedAmount),
+      JSBI.exponentiate(JSBI.BigInt(10), JSBI.BigInt(decimals))
+    ),
+    JSBI.BigInt(extraDigits)
+  );
 }

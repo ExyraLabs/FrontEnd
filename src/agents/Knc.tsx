@@ -1,3 +1,4 @@
+"use client";
 import { useAppKitAccount } from "@reown/appkit/react";
 import { parseUnits, formatUnits } from "viem";
 import { useCopilotAction } from "@copilotkit/react-core";
@@ -6,6 +7,7 @@ import {
   getContractAddressWithDecimals,
   getAvailablePlatforms,
 } from "@/lib/coingecko";
+import SlippageSelector from "@/components/SlippageSelector";
 
 // KyberSwap Aggregator API configuration
 const KYBERSWAP_API_BASE = "https://aggregator-api.kyberswap.com";
@@ -275,7 +277,10 @@ const Knc = () => {
     }
 
     try {
-      // Use the extracted helper function
+      // Step 1: Resolve token addresses using symbols
+      console.log(
+        `🔍 Step 1: Resolving token addresses for ${tokenInSymbol} → ${tokenOutSymbol}...`
+      );
       const { tokenInData, tokenInAddress, tokenOutAddress } =
         await resolveTokenAddresses(tokenInSymbol, tokenOutSymbol, platform);
 
@@ -287,6 +292,7 @@ const Knc = () => {
       const amountInWei = parseUnits(amount, tokenInDecimals).toString();
 
       // Step 3: Get route using extracted helper
+      console.log(`🔍 Step 3: Getting swap route...`);
       const routeData: SwapQuote = await fetchKyberSwapRoute(
         tokenInAddress,
         tokenOutAddress,
@@ -295,6 +301,10 @@ const Knc = () => {
       );
 
       // Step 4: Build transaction
+      console.log(`🔧 Step 4: Building transaction...`, {
+        routeSummary: routeData.routeSummary,
+        routerAddress: routeData.routerAddress,
+      });
       const buildUrl = `${KYBERSWAP_API_BASE}/${kyberChainName}/api/v1/route/build`;
       const buildResponse = await axios.post(
         buildUrl,
@@ -314,27 +324,70 @@ const Knc = () => {
 
       const swapData: SwapResult = buildResponse.data.data;
 
-      //
-      return swapData;
+      // Step 5: Check if we need approval (for non-native tokens)
+      if (tokenInAddress !== "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE") {
+        console.log(`🔐 Step 5: Checking token approval...`, swapData);
 
-      // 🔄 **Swap Details**:
-      //   • From: ${amount} ${tokenInSymbol} (${tokenInData.name})
-      //   • To: ${formatUnits(
-      //     BigInt(swapData.amountOut),
-      //     tokenOutData.decimals || 18
-      //   )} ${tokenOutSymbol} (${tokenOutData.name})
-      //   • Platform: ${platform} (Chain ID: ${chainId})
-      //   • Slippage: ${slippageTolerance / 100}%
+        // Import the ethers approval function
+        const { getTokenApprovalEthers } = await import("@/lib/utils");
 
-      // ⛽ **Gas Information**:
-      //   • Estimated Gas: ${parseInt(swapData.gas).toLocaleString()} units
-      //   • Gas Cost: $${parseFloat(swapData.gasUsd).toFixed(4)}
+        // Get approval for the router contract
+        const approvalResult = await getTokenApprovalEthers(
+          address,
+          tokenInAddress,
+          swapData.routerAddress,
+          amountInWei
+        );
 
-      // 🛠️ **Transaction Details**:
-      //   • Router: ${swapData.routerAddress}
-      //   • Transaction ready for wallet approval
+        if (!approvalResult.success) {
+          return `❌ Token approval failed: ${
+            approvalResult.error?.message || "Unknown error"
+          }`;
+        }
 
-      // 🎯 **Ready to execute!** Transaction prepared with optimal KyberSwap routing.`;
+        if (approvalResult.needsApproval) {
+          console.log(
+            `✅ Token approval successful! TX: ${approvalResult.txHash}`
+          );
+        } else {
+          console.log(`✅ Token already approved for spending`);
+        }
+      }
+
+      // Step 6: Execute the swap
+      console.log(`🚀 Step 6: Executing swap transaction...`);
+
+      // Get signer for transaction execution
+      const { getSigner } = await import("@/lib/utils");
+      const signer = await getSigner();
+
+      if (!signer) {
+        return `❌ Unable to get wallet signer. Please ensure your wallet is connected.`;
+      }
+
+      const signerAddress = await signer.getAddress();
+
+      console.log(`Encoded data: ${swapData.data.substring(0, 50)}...`);
+      console.log(`Router contract address: ${swapData.routerAddress}`);
+
+      // Execute the swap transaction
+      const executeSwapTx = await signer.sendTransaction({
+        to: swapData.routerAddress,
+        data: swapData.data,
+        from: signerAddress,
+      });
+
+      console.log(
+        `Swap transaction submitted with hash: ${executeSwapTx.hash}`
+      );
+
+      // Wait for transaction confirmation
+      const executeSwapTxReceipt = await executeSwapTx.wait();
+      console.log(
+        `Swap tx executed with hash: ${executeSwapTxReceipt?.blockHash}`
+      );
+
+      return `✅ Swap Transaction Executed Successfully!`;
     } catch (error) {
       console.error("KyberSwap execution error:", error);
       if (
@@ -343,7 +396,11 @@ const Knc = () => {
       ) {
         return `❌ ${error.message}`;
       }
-      return `❌ Swap execution failed: ${
+      if (axios.isAxiosError(error)) {
+        const errorMsg = error.response?.data?.message || error.message;
+        return `❌ Swap execution failed: ${errorMsg}`;
+      }
+      return `❌ Unexpected error during swap execution: ${
         error instanceof Error ? error.message : "Unknown error"
       }`;
     }
@@ -454,188 +511,6 @@ ${tokenResults
     }
   };
 
-  const handleExecuteKyberSwap = async ({
-    tokenIn,
-    tokenOut,
-    amount,
-    slippageTolerance = DEFAULT_SLIPPAGE,
-    chainId = 1,
-  }: {
-    tokenIn: string;
-    tokenOut: string;
-    amount: string;
-    slippageTolerance?: number;
-    chainId?: number;
-  }) => {
-    if (!isConnected || !address) {
-      return "❌ Wallet not connected. Please connect your wallet to execute swaps.";
-    }
-
-    try {
-      const kyberChainName = getKyberChainName(chainId);
-      const amountInWei = parseUnits(amount, 18).toString();
-
-      // Step 1: Get route
-      console.log(`🔍 Step 1: Getting swap route...`);
-      const routeUrl = `${KYBERSWAP_API_BASE}/${kyberChainName}/api/v1/routes`;
-      const routeResponse = await axios.get(routeUrl, {
-        params: {
-          tokenIn,
-          tokenOut,
-          amountIn: amountInWei,
-        },
-        headers: {
-          "X-Client-Id": DEFAULT_CLIENT_ID,
-        },
-      });
-
-      const routeData: SwapQuote = routeResponse.data.data;
-
-      // Step 2: Build transaction
-      console.log(`🔧 Step 2: Building transaction...`);
-      const buildUrl = `${KYBERSWAP_API_BASE}/${kyberChainName}/api/v1/route/build`;
-      const buildResponse = await axios.post(
-        buildUrl,
-        {
-          routeSummary: routeData.routeSummary,
-          sender: address,
-          recipient: address,
-          slippageTolerance,
-          enableGasEstimation: true,
-        },
-        {
-          headers: {
-            "x-client-id": DEFAULT_CLIENT_ID,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      const swapData: SwapResult = buildResponse.data.data;
-
-      // Step 3: Check if we need approval (for non-native tokens)
-      if (tokenIn !== "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE") {
-        console.log(`🔐 Step 3: Checking token approval...`);
-
-        // Import the ethers approval function
-        const { getTokenApprovalEthers } = await import("@/lib/utils");
-
-        // Get approval for the router contract
-        const approvalResult = await getTokenApprovalEthers(
-          tokenIn,
-          swapData.routerAddress,
-          amountInWei
-        );
-
-        if (!approvalResult.success) {
-          return `❌ Token approval failed: ${
-            approvalResult.error?.message || "Unknown error"
-          }
-          
-🔧 **Common Issues**:
-  • Wallet not connected properly
-  • Insufficient gas for approval transaction
-  • Token contract interaction failed
-  
-💡 Please check your wallet connection and try again.`;
-        }
-
-        if (approvalResult.needsApproval) {
-          console.log(
-            `✅ Token approval successful! TX: ${approvalResult.txHash}`
-          );
-        } else {
-          console.log(`✅ Token already approved for spending`);
-        }
-      }
-
-      // Step 4: Execute the swap
-      console.log(`🚀 Step 4: Executing swap transaction...`);
-
-      // Get signer for transaction execution
-      const { getSigner } = await import("@/lib/utils");
-      const signer = await getSigner();
-
-      if (!signer) {
-        return `❌ Unable to get wallet signer. Please ensure your wallet is connected.`;
-      }
-
-      const signerAddress = await signer.getAddress();
-
-      // Prepare transaction object
-      const transactionValue =
-        tokenIn === "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"
-          ? swapData.amountIn
-          : "0";
-
-      console.log(`Encoded data: ${swapData.data.substring(0, 50)}...`);
-      console.log(`Router contract address: ${swapData.routerAddress}`);
-
-      // Execute the swap transaction
-      const executeSwapTx = await signer.sendTransaction({
-        to: swapData.routerAddress,
-        data: swapData.data,
-        value: transactionValue,
-        from: signerAddress,
-        gasLimit: swapData.gas,
-      });
-
-      console.log(
-        `Swap transaction submitted with hash: ${executeSwapTx.hash}`
-      );
-
-      // Wait for transaction confirmation
-      const executeSwapTxReceipt = await executeSwapTx.wait();
-      console.log(
-        `Swap tx executed with hash: ${executeSwapTxReceipt?.blockHash}`
-      );
-
-      return `✅ Swap Transaction Executed Successfully!
-
-🎉 **Transaction Completed**:
-  • Transaction Hash: ${executeSwapTxReceipt?.blockHash}
-  • Block Number: ${executeSwapTxReceipt?.blockNumber}
-  • Gas Used: ${executeSwapTxReceipt?.gasUsed?.toString()}
-
-🔄 **Swap Details**:
-  • Router Contract: ${swapData.routerAddress}
-  • Input Amount: ${formatUnits(BigInt(swapData.amountIn), 18)} tokens
-  • Expected Output: ${formatUnits(BigInt(swapData.amountOut), 18)} tokens
-  • Slippage Tolerance: ${slippageTolerance / 100}%
-
-⛽ **Gas Information**:
-  • Estimated Gas: ${parseInt(swapData.gas).toLocaleString()} units
-  • Gas Cost: $${parseFloat(swapData.gasUsd).toFixed(4)}
-
-📝 **Transaction Data**:
-  • To: ${swapData.routerAddress}
-  • Value: ${transactionValue} wei
-  • Data: ${swapData.data.substring(0, 50)}...
-
-🎯 **Swap completed successfully!** Your tokens have been exchanged using KyberSwap's optimal routing.
-
-💡 You can view the transaction details on Etherscan using the transaction hash above.`;
-    } catch (error) {
-      console.error("KyberSwap execution error:", error);
-      if (axios.isAxiosError(error)) {
-        const errorMsg = error.response?.data?.message || error.message;
-        return `❌ Swap execution failed: ${errorMsg}
-
-🔧 **Common Issues**:
-  • Insufficient token balance
-  • Token approval needed (for ERC-20 tokens)
-  • High slippage or low liquidity
-  • Gas estimation failure
-  • Network congestion
-
-💡 Try reducing the amount or increasing slippage tolerance.`;
-      }
-      return `❌ Unexpected error during swap execution: ${
-        error instanceof Error ? error.message : "Unknown error"
-      }`;
-    }
-  };
-
   // Get Swap Quote by Symbol Action (integrated with CoinGecko)
   useCopilotAction({
     name: "getKyberSwapQuoteBySymbol",
@@ -672,11 +547,42 @@ ${tokenResults
     handler: handleGetKyberSwapQuoteBySymbol,
   });
 
-  // Execute Swap by Symbol Action (integrated with CoinGecko)
+  // Test Simple Render Action
+  useCopilotAction({
+    name: "testSlippageUI",
+    description:
+      "Test action to verify renderAndWaitForResponse and slippage UI works",
+    parameters: [],
+    render: ({ status }) => {
+      console.log("Test status:", status);
+
+      return (
+        <div className="bg-[#1A1A1A] border border-[#A9A0FF] rounded-[20px] p-6 max-w-md w-full mx-4">
+          <div className="text-white text-center mb-4">
+            🧪 Slippage UI Test (Status: {status})
+          </div>
+          <div className="text-gray-300 text-sm mb-4 text-center">
+            This tests that renderAndWaitForResponse is working correctly with
+            your UI setup.
+          </div>
+          <div className="flex gap-3">
+            <button className="flex-1 bg-[#2E2E2E] text-gray-300 py-2 rounded-lg hover:bg-[#3E3E3E]">
+              Cancel
+            </button>
+            <button className="flex-1 bg-[#A9A0FF] text-white py-2 rounded-lg hover:bg-[#9A8FFF]">
+              Confirm
+            </button>
+          </div>
+        </div>
+      );
+    },
+  });
+
+  // Execute Swap by Symbol Action (integrated with CoinGecko) - with Human-in-the-Loop Slippage Selection
   useCopilotAction({
     name: "executeKyberSwapBySymbol",
     description:
-      "Execute a token swap using KyberSwap Aggregator with token symbols. Automatically fetches token addresses.",
+      "Execute a token swap using KyberSwap Aggregator with token symbols. Shows slippage selector before execution.",
     parameters: [
       {
         name: "tokenInSymbol",
@@ -702,6 +608,146 @@ ${tokenResults
         description: "Blockchain platform (default: 'ethereum')",
         required: false,
       },
+    ],
+    renderAndWaitForResponse: ({ args, respond, status }) => {
+      const {
+        tokenInSymbol,
+        tokenOutSymbol,
+        amount,
+        platform = "ethereum",
+      } = args;
+
+      console.log("Status:", status); // Debug log
+
+      // Show different UI based on status
+      if (status === "inProgress") {
+        // Type check required parameters
+        if (!tokenInSymbol || !tokenOutSymbol || !amount) {
+          // Return error state as JSX
+          return (
+            <div className="bg-[#1A1A1A] border border-red-500/20 rounded-[20px] p-6 max-w-md w-full mx-4">
+              <div className="text-red-400 text-center">
+                ❌ Missing required parameters for swap execution
+              </div>
+              <button
+                onClick={() => {
+                  if (respond) {
+                    (respond as (message: string) => void)(
+                      "❌ Missing required parameters for swap execution"
+                    );
+                  }
+                }}
+                className="w-full mt-4 bg-red-500 text-white py-2 rounded-lg"
+              >
+                Close
+              </button>
+            </div>
+          );
+        }
+
+        // Show slippage selector during inProgress status
+        return (
+          <SlippageSelector
+            tokenInSymbol={tokenInSymbol}
+            tokenOutSymbol={tokenOutSymbol}
+            amount={amount}
+            platform={platform}
+            onConfirm={async (slippageTolerance: number) => {
+              console.log("Slippage confirmed:", slippageTolerance);
+              // Execute the swap with the selected slippage
+              const result = await handleExecuteKyberSwapBySymbol({
+                tokenInSymbol,
+                tokenOutSymbol,
+                amount,
+                platform,
+                slippageTolerance,
+              });
+              if (respond) {
+                (respond as (message: string) => void)(result);
+              }
+            }}
+            onCancel={() => {
+              console.log("Swap cancelled");
+              if (respond) {
+                (respond as (message: string) => void)(
+                  "🚫 Swap cancelled by user"
+                );
+              }
+            }}
+          />
+        );
+      }
+
+      if (status === "executing") {
+        // Show loading state during execution
+        return (
+          <div className="bg-[#1A1A1A] border border-[#A9A0FF]/20 rounded-[20px] p-6 max-w-md w-full mx-4">
+            <div className="flex items-center justify-center gap-3 text-[#A9A0FF]">
+              <div className="w-4 h-4 border-2 border-[#A9A0FF] border-t-transparent rounded-full animate-spin"></div>
+              <div className="text-white font-medium">Executing Swap...</div>
+            </div>
+            <div className="text-gray-400 text-sm text-center mt-2">
+              Processing {amount} {tokenInSymbol} → {tokenOutSymbol} on{" "}
+              {platform}
+            </div>
+          </div>
+        );
+      }
+
+      if (status === "complete") {
+        // Show completion state (this will be brief before result is shown)
+        return (
+          <div className="bg-[#1A1A1A] border border-green-500/20 rounded-[20px] p-6 max-w-md w-full mx-4">
+            <div className="flex items-center justify-center gap-3 text-green-400">
+              <div className="text-lg">✅</div>
+              <div className="text-white font-medium">Swap Complete!</div>
+            </div>
+          </div>
+        );
+      }
+
+      // Fallback for any other status
+      return (
+        <div className="bg-[#1A1A1A] border border-gray-500/20 rounded-[20px] p-6 max-w-md w-full mx-4">
+          <div className="text-gray-400 text-center">
+            Preparing swap... (Status: {status})
+          </div>
+        </div>
+      );
+    },
+  });
+
+  // Execute Swap Action (renamed and updated to use symbols)
+  useCopilotAction({
+    name: "executeKyberSwap",
+    description:
+      "Execute a token swap using KyberSwap Aggregator with token symbols. This performs the actual on-chain transaction.",
+    parameters: [
+      {
+        name: "tokenInSymbol",
+        type: "string",
+        description: "Input token symbol (e.g., 'ETH', 'USDC', 'BTC')",
+        required: true,
+      },
+      {
+        name: "tokenOutSymbol",
+        type: "string",
+        description: "Output token symbol (e.g., 'USDC', 'ETH', 'DAI')",
+        required: true,
+      },
+      {
+        name: "amount",
+        type: "string",
+        description:
+          "Amount of input token to swap (in token units, e.g., '1.0' for 1 token)",
+        required: true,
+      },
+      {
+        name: "platform",
+        type: "string",
+        description: "Blockchain platform (default: 'ethereum')",
+        required: false,
+      },
       {
         name: "slippageTolerance",
         type: "number",
@@ -713,652 +759,547 @@ ${tokenResults
     handler: handleExecuteKyberSwapBySymbol,
   });
 
-  // Execute Swap Action
-  useCopilotAction({
-    name: "executeKyberSwap",
-    description:
-      "Execute a token swap using KyberSwap Aggregator. This performs the actual on-chain transaction.",
-    parameters: [
-      {
-        name: "tokenIn",
-        type: "string",
-        description: "Input token address (same as used in quote)",
-        required: true,
-      },
-      {
-        name: "tokenOut",
-        type: "string",
-        description: "Output token address (same as used in quote)",
-        required: true,
-      },
-      {
-        name: "amount",
-        type: "string",
-        description: "Amount of input token to swap (same as used in quote)",
-        required: true,
-      },
-      {
-        name: "slippageTolerance",
-        type: "number",
-        description:
-          "Slippage tolerance in bips (e.g., 50 = 0.5%, 100 = 1%). Default: 50",
-        required: false,
-      },
-      {
-        name: "chainId",
-        type: "number",
-        description:
-          "Chain ID for the swap (1=Ethereum, 137=Polygon, etc.). Default: 1",
-        required: false,
-      },
-    ],
-    handler: handleExecuteKyberSwap,
-  });
+  //   // Token Information Action
+  //   useCopilotAction({
+  //     name: "getTokenInfo",
+  //     description:
+  //       "Get detailed information about a token including its price, symbol, and basic metadata.",
+  //     parameters: [
+  //       {
+  //         name: "tokenAddress",
+  //         type: "string",
+  //         description: "Token contract address to get information for",
+  //         required: true,
+  //       },
+  //       {
+  //         name: "chainId",
+  //         type: "number",
+  //         description: "Chain ID where the token exists. Default: 1 (Ethereum)",
+  //         required: false,
+  //       },
+  //     ],
+  //     handler: async ({
+  //       tokenAddress,
+  //       chainId = 1,
+  //     }: {
+  //       tokenAddress: string;
+  //       chainId?: number;
+  //     }) => {
+  //       try {
+  //         // Simple address validation - basic format check
+  //         if (
+  //           !tokenAddress ||
+  //           tokenAddress.length !== 42 ||
+  //           !tokenAddress.startsWith("0x")
+  //         ) {
+  //           return "❌ Invalid token address provided.";
+  //         }
 
-  // Token Information Action
-  useCopilotAction({
-    name: "getTokenInfo",
-    description:
-      "Get detailed information about a token including its price, symbol, and basic metadata.",
-    parameters: [
-      {
-        name: "tokenAddress",
-        type: "string",
-        description: "Token contract address to get information for",
-        required: true,
-      },
-      {
-        name: "chainId",
-        type: "number",
-        description: "Chain ID where the token exists. Default: 1 (Ethereum)",
-        required: false,
-      },
-    ],
-    handler: async ({
-      tokenAddress,
-      chainId = 1,
-    }: {
-      tokenAddress: string;
-      chainId?: number;
-    }) => {
-      try {
-        // Simple address validation - basic format check
-        if (
-          !tokenAddress ||
-          tokenAddress.length !== 42 ||
-          !tokenAddress.startsWith("0x")
-        ) {
-          return "❌ Invalid token address provided.";
-        }
+  //         const kyberChainName = getKyberChainName(chainId);
 
-        const kyberChainName = getKyberChainName(chainId);
+  //         // Use a small amount to get token info from the routes API
+  //         const url = `${KYBERSWAP_API_BASE}/${kyberChainName}/api/v1/routes`;
+  //         const params = {
+  //           tokenIn: tokenAddress,
+  //           tokenOut: "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE", // Native token
+  //           amountIn: "1000000000000000000", // 1 token (18 decimals)
+  //         };
 
-        // Use a small amount to get token info from the routes API
-        const url = `${KYBERSWAP_API_BASE}/${kyberChainName}/api/v1/routes`;
-        const params = {
-          tokenIn: tokenAddress,
-          tokenOut: "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE", // Native token
-          amountIn: "1000000000000000000", // 1 token (18 decimals)
-        };
+  //         const response = await axios.get(url, {
+  //           params,
+  //           headers: {
+  //             "X-Client-Id": DEFAULT_CLIENT_ID,
+  //           },
+  //         });
 
-        const response = await axios.get(url, {
-          params,
-          headers: {
-            "X-Client-Id": DEFAULT_CLIENT_ID,
-          },
-        });
+  //         const data = response.data.data;
+  //         const routeSummary = data.routeSummary;
 
-        const data = response.data.data;
-        const routeSummary = data.routeSummary;
+  //         const tokenInPrice = parseFloat(routeSummary.amountInUsd);
+  //         const tokenSymbol = "TOKEN"; // KyberSwap API doesn't return symbol in route summary
 
-        const tokenInPrice = parseFloat(routeSummary.amountInUsd);
-        const tokenSymbol = "TOKEN"; // KyberSwap API doesn't return symbol in route summary
+  //         return `🪙 Token Information:
 
-        return `🪙 Token Information:
+  // 📍 **Basic Details**:
+  //   • Address: ${tokenAddress}
+  //   • Network: ${
+  //     kyberChainName.charAt(0).toUpperCase() + kyberChainName.slice(1)
+  //   } (Chain ID: ${chainId})
+  //   • Symbol: ${tokenSymbol} (estimated)
 
-📍 **Basic Details**:
-  • Address: ${tokenAddress}
-  • Network: ${
-    kyberChainName.charAt(0).toUpperCase() + kyberChainName.slice(1)
-  } (Chain ID: ${chainId})
-  • Symbol: ${tokenSymbol} (estimated)
+  // 💰 **Price Information**:
+  //   • USD Value: $${tokenInPrice.toFixed(6)} per token
+  //   • Based on current market rates
 
-💰 **Price Information**:
-  • USD Value: $${tokenInPrice.toFixed(6)} per token
-  • Based on current market rates
+  // 🔄 **Trading Status**:
+  //   • ✅ Available for trading on KyberSwap
+  //   • Router: ${data.routerAddress}
 
-🔄 **Trading Status**:
-  • ✅ Available for trading on KyberSwap
-  • Router: ${data.routerAddress}
+  // 📊 **Market Data**:
+  //   • Liquidity: Available across multiple DEXes
+  //   • Routes: ${routeSummary.route.length} potential path(s)
 
-📊 **Market Data**:
-  • Liquidity: Available across multiple DEXes
-  • Routes: ${routeSummary.route.length} potential path(s)
+  // 💡 This token can be swapped using KyberSwap Aggregator for optimal rates.`;
+  //       } catch (error) {
+  //         console.error("Token info error:", error);
+  //         if (axios.isAxiosError(error)) {
+  //           if (error.response?.status === 400) {
+  //             const chainName = getKyberChainName(chainId);
+  //             return `⚠️ Token information not available:
 
-💡 This token can be swapped using KyberSwap Aggregator for optimal rates.`;
-      } catch (error) {
-        console.error("Token info error:", error);
-        if (axios.isAxiosError(error)) {
-          if (error.response?.status === 400) {
-            const chainName = getKyberChainName(chainId);
-            return `⚠️ Token information not available:
+  // This could mean:
+  //   • Token doesn't exist on ${chainName} (Chain ID: ${chainId})
+  //   • No liquidity available for this token
+  //   • Invalid token contract address
 
-This could mean:
-  • Token doesn't exist on ${chainName} (Chain ID: ${chainId})
-  • No liquidity available for this token
-  • Invalid token contract address
+  // 🔧 Please verify:
+  //   • Token address is correct
+  //   • Token exists on the specified chain
+  //   • Token has trading liquidity`;
+  //           }
+  //         }
+  //         return `❌ Error fetching token information: ${
+  //           error instanceof Error ? error.message : "Unknown error"
+  //         }`;
+  //       }
+  //     },
+  //   });
 
-🔧 Please verify:
-  • Token address is correct
-  • Token exists on the specified chain
-  • Token has trading liquidity`;
-          }
-        }
-        return `❌ Error fetching token information: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`;
-      }
-    },
-  });
+  //   // Common Tokens Helper Action (using CoinGecko)
+  //   useCopilotAction({
+  //     name: "getCommonTokens",
+  //     description:
+  //       "Get a list of common token addresses for popular tokens on different platforms using CoinGecko integration.",
+  //     parameters: [
+  //       {
+  //         name: "platform",
+  //         type: "string",
+  //         description:
+  //           "Platform name (default: 'ethereum'). Use getAvailablePlatforms to see all options.",
+  //         required: false,
+  //       },
+  //     ],
+  //     handler: handleGetCommonTokens,
+  //   });
 
-  // Common Tokens Helper Action (using CoinGecko)
-  useCopilotAction({
-    name: "getCommonTokens",
-    description:
-      "Get a list of common token addresses for popular tokens on different platforms using CoinGecko integration.",
-    parameters: [
-      {
-        name: "platform",
-        type: "string",
-        description:
-          "Platform name (default: 'ethereum'). Use getAvailablePlatforms to see all options.",
-        required: false,
-      },
-    ],
-    handler: handleGetCommonTokens,
-  });
+  //   // Get Available Platforms Action
+  //   useCopilotAction({
+  //     name: "getAvailablePlatforms",
+  //     description:
+  //       "Get list of all available blockchain platforms supported by CoinGecko integration",
+  //     handler: async () => {
+  //       try {
+  //         const platforms = await getAvailablePlatforms("simple");
+  //         return `🌐 Available Blockchain Platforms (${platforms.length} total):
 
-  // Get Available Platforms Action
-  useCopilotAction({
-    name: "getAvailablePlatforms",
-    description:
-      "Get list of all available blockchain platforms supported by CoinGecko integration",
-    handler: async () => {
-      try {
-        const platforms = await getAvailablePlatforms("simple");
-        return `🌐 Available Blockchain Platforms (${platforms.length} total):
+  // **Popular Platforms**:
+  // ${platforms
+  //   .slice(0, 15)
+  //   .map((platform) => `  • ${platform}`)
+  //   .join("\n")}
 
-**Popular Platforms**:
-${platforms
-  .slice(0, 15)
-  .map((platform) => `  • ${platform}`)
-  .join("\n")}
+  // ${
+  //   platforms.length > 15
+  //     ? `**Additional Platforms**:
+  // ${platforms
+  //   .slice(15, 30)
+  //   .map((platform) => `  • ${platform}`)
+  //   .join("\n")}
 
-${
-  platforms.length > 15
-    ? `**Additional Platforms**:
-${platforms
-  .slice(15, 30)
-  .map((platform) => `  • ${platform}`)
-  .join("\n")}
+  // ...and ${platforms.length - 30} more platforms available.`
+  //     : ""
+  // }
 
-...and ${platforms.length - 30} more platforms available.`
-    : ""
-}
+  // 💡 **Common Platform Names**:
+  //   • \`ethereum\` - Ethereum Mainnet
+  //   • \`polygon-pos\` - Polygon
+  //   • \`binance-smart-chain\` - BSC
+  //   • \`arbitrum-one\` - Arbitrum
+  //   • \`optimistic-ethereum\` - Optimism
+  //   • \`avalanche\` - Avalanche C-Chain
 
-💡 **Common Platform Names**:
-  • \`ethereum\` - Ethereum Mainnet
-  • \`polygon-pos\` - Polygon
-  • \`binance-smart-chain\` - BSC
-  • \`arbitrum-one\` - Arbitrum
-  • \`optimistic-ethereum\` - Optimism
-  • \`avalanche\` - Avalanche C-Chain
+  // Use these platform names with other KNC actions for multi-chain token operations.`;
+  //       } catch (error) {
+  //         return `❌ Failed to fetch available platforms: ${
+  //           error instanceof Error ? error.message : "Unknown error"
+  //         }`;
+  //       }
+  //     },
+  //   });
 
-Use these platform names with other KNC actions for multi-chain token operations.`;
-      } catch (error) {
-        return `❌ Failed to fetch available platforms: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`;
-      }
-    },
-  });
+  //   // Swap Preview with Multiple Options
+  //   useCopilotAction({
+  //     name: "compareSwapOptions",
+  //     description:
+  //       "Compare swap options for the same token pair with different amounts to help optimize your trade.",
+  //     parameters: [
+  //       {
+  //         name: "tokenIn",
+  //         type: "string",
+  //         description: "Input token address",
+  //         required: true,
+  //       },
+  //       {
+  //         name: "tokenOut",
+  //         type: "string",
+  //         description: "Output token address",
+  //         required: true,
+  //       },
+  //       {
+  //         name: "amounts",
+  //         type: "string",
+  //         description: "Comma-separated amounts to compare (e.g., '0.1,1,10')",
+  //         required: true,
+  //       },
+  //       {
+  //         name: "chainId",
+  //         type: "number",
+  //         description: "Chain ID for the comparison. Default: 1",
+  //         required: false,
+  //       },
+  //     ],
+  //     handler: async ({
+  //       tokenIn,
+  //       tokenOut,
+  //       amounts,
+  //       chainId = 1,
+  //     }: {
+  //       tokenIn: string;
+  //       tokenOut: string;
+  //       amounts: string;
+  //       chainId?: number;
+  //     }) => {
+  //       try {
+  //         const kyberChainName = getKyberChainName(chainId);
+  //         const amountArray = amounts.split(",").map((a) => a.trim());
 
-  // Swap Preview with Multiple Options
-  useCopilotAction({
-    name: "compareSwapOptions",
-    description:
-      "Compare swap options for the same token pair with different amounts to help optimize your trade.",
-    parameters: [
-      {
-        name: "tokenIn",
-        type: "string",
-        description: "Input token address",
-        required: true,
-      },
-      {
-        name: "tokenOut",
-        type: "string",
-        description: "Output token address",
-        required: true,
-      },
-      {
-        name: "amounts",
-        type: "string",
-        description: "Comma-separated amounts to compare (e.g., '0.1,1,10')",
-        required: true,
-      },
-      {
-        name: "chainId",
-        type: "number",
-        description: "Chain ID for the comparison. Default: 1",
-        required: false,
-      },
-    ],
-    handler: async ({
-      tokenIn,
-      tokenOut,
-      amounts,
-      chainId = 1,
-    }: {
-      tokenIn: string;
-      tokenOut: string;
-      amounts: string;
-      chainId?: number;
-    }) => {
-      try {
-        const kyberChainName = getKyberChainName(chainId);
-        const amountArray = amounts.split(",").map((a) => a.trim());
+  //         if (amountArray.length > 5) {
+  //           return "❌ Maximum 5 amounts can be compared at once.";
+  //         }
 
-        if (amountArray.length > 5) {
-          return "❌ Maximum 5 amounts can be compared at once.";
-        }
+  //         const comparisons = [];
 
-        const comparisons = [];
+  //         for (const amount of amountArray) {
+  //           try {
+  //             const amountInWei = parseUnits(amount, 18).toString();
+  //             const url = `${KYBERSWAP_API_BASE}/${kyberChainName}/api/v1/routes`;
 
-        for (const amount of amountArray) {
-          try {
-            const amountInWei = parseUnits(amount, 18).toString();
-            const url = `${KYBERSWAP_API_BASE}/${kyberChainName}/api/v1/routes`;
+  //             const response = await axios.get(url, {
+  //               params: {
+  //                 tokenIn,
+  //                 tokenOut,
+  //                 amountIn: amountInWei,
+  //               },
+  //               headers: {
+  //                 "X-Client-Id": DEFAULT_CLIENT_ID,
+  //               },
+  //             });
 
-            const response = await axios.get(url, {
-              params: {
-                tokenIn,
-                tokenOut,
-                amountIn: amountInWei,
-              },
-              headers: {
-                "X-Client-Id": DEFAULT_CLIENT_ID,
-              },
-            });
+  //             const data = response.data.data;
+  //             const routeSummary = data.routeSummary;
 
-            const data = response.data.data;
-            const routeSummary = data.routeSummary;
+  //             const outputAmount = formatUnits(
+  //               BigInt(routeSummary.amountOut),
+  //               18
+  //             );
+  //             const rate = Number(outputAmount) / Number(amount);
 
-            const outputAmount = formatUnits(
-              BigInt(routeSummary.amountOut),
-              18
-            );
-            const rate = Number(outputAmount) / Number(amount);
+  //             comparisons.push({
+  //               input: amount,
+  //               output: outputAmount,
+  //               rate: rate,
+  //               gasUsd: parseFloat(routeSummary.gasUsd),
+  //               priceImpact:
+  //                 ((parseFloat(routeSummary.amountInUsd) -
+  //                   parseFloat(routeSummary.amountOutUsd)) /
+  //                   parseFloat(routeSummary.amountInUsd)) *
+  //                 100,
+  //             });
+  //           } catch {
+  //             comparisons.push({
+  //               input: amount,
+  //               output: "Error",
+  //               rate: 0,
+  //               gasUsd: 0,
+  //               priceImpact: 0,
+  //             });
+  //           }
+  //         }
 
-            comparisons.push({
-              input: amount,
-              output: outputAmount,
-              rate: rate,
-              gasUsd: parseFloat(routeSummary.gasUsd),
-              priceImpact:
-                ((parseFloat(routeSummary.amountInUsd) -
-                  parseFloat(routeSummary.amountOutUsd)) /
-                  parseFloat(routeSummary.amountInUsd)) *
-                100,
-            });
-          } catch {
-            comparisons.push({
-              input: amount,
-              output: "Error",
-              rate: 0,
-              gasUsd: 0,
-              priceImpact: 0,
-            });
-          }
-        }
+  //         const comparisonText = comparisons
+  //           .map((comp, index) => {
+  //             if (comp.output === "Error") {
+  //               return `${index + 1}. Amount: ${
+  //                 comp.input
+  //               } → ❌ Error getting quote`;
+  //             }
+  //             return `${index + 1}. Amount: ${comp.input} tokens
+  //    → Output: ${parseFloat(comp.output).toFixed(6)} tokens
+  //    → Rate: 1:${comp.rate.toFixed(6)}
+  //    → Gas: $${comp.gasUsd.toFixed(4)}
+  //    → Price Impact: ${comp.priceImpact.toFixed(3)}%`;
+  //           })
+  //           .join("\n\n");
 
-        const comparisonText = comparisons
-          .map((comp, index) => {
-            if (comp.output === "Error") {
-              return `${index + 1}. Amount: ${
-                comp.input
-              } → ❌ Error getting quote`;
-            }
-            return `${index + 1}. Amount: ${comp.input} tokens
-   → Output: ${parseFloat(comp.output).toFixed(6)} tokens
-   → Rate: 1:${comp.rate.toFixed(6)}
-   → Gas: $${comp.gasUsd.toFixed(4)}
-   → Price Impact: ${comp.priceImpact.toFixed(3)}%`;
-          })
-          .join("\n\n");
+  //         // Find best rate
+  //         const validComparisons = comparisons.filter(
+  //           (c) => c.output !== "Error"
+  //         );
+  //         const bestRate =
+  //           validComparisons.length > 0
+  //             ? Math.max(...validComparisons.map((c) => c.rate))
+  //             : 0;
+  //         const bestIndex = validComparisons.findIndex(
+  //           (c) => c.rate === bestRate
+  //         );
 
-        // Find best rate
-        const validComparisons = comparisons.filter(
-          (c) => c.output !== "Error"
-        );
-        const bestRate =
-          validComparisons.length > 0
-            ? Math.max(...validComparisons.map((c) => c.rate))
-            : 0;
-        const bestIndex = validComparisons.findIndex(
-          (c) => c.rate === bestRate
-        );
+  //         return `📊 Swap Options Comparison:
 
-        return `📊 Swap Options Comparison:
+  // ${comparisonText}
 
-${comparisonText}
+  // ${
+  //   validComparisons.length > 0
+  //     ? `
+  // 🎯 **Best Rate**: Option ${
+  //         validComparisons.indexOf(validComparisons[bestIndex]) + 1
+  //       } with rate 1:${bestRate.toFixed(6)}
 
-${
-  validComparisons.length > 0
-    ? `
-🎯 **Best Rate**: Option ${
-        validComparisons.indexOf(validComparisons[bestIndex]) + 1
-      } with rate 1:${bestRate.toFixed(6)}
+  // 💡 **Insights**:
+  //   • Consider gas costs vs amount when choosing
+  //   • Larger amounts may have higher price impact
+  //   • Multiple smaller swaps might be more efficient for large amounts
+  // `
+  //     : "❌ No valid quotes available"
+  // }
 
-💡 **Insights**:
-  • Consider gas costs vs amount when choosing
-  • Larger amounts may have higher price impact
-  • Multiple smaller swaps might be more efficient for large amounts
-`
-    : "❌ No valid quotes available"
-}
+  // 🔗 Network: ${
+  //           kyberChainName.charAt(0).toUpperCase() + kyberChainName.slice(1)
+  //         }`;
+  //       } catch (error) {
+  //         console.error("Comparison error:", error);
+  //         return `❌ Error comparing swap options: ${
+  //           error instanceof Error ? error.message : "Unknown error"
+  //         }`;
+  //       }
+  //     },
+  //   });
 
-🔗 Network: ${
-          kyberChainName.charAt(0).toUpperCase() + kyberChainName.slice(1)
-        }`;
-      } catch (error) {
-        console.error("Comparison error:", error);
-        return `❌ Error comparing swap options: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`;
-      }
-    },
-  });
+  //   // Overview Action
+  //   useCopilotAction({
+  //     name: "kyberSwapOverview",
+  //     description:
+  //       "Get a comprehensive overview of all available KyberSwap actions and supported features.",
+  //     parameters: [],
+  //     handler: async () => {
+  //       const isWalletConnected = isConnected && address;
 
-  // Overview Action
-  useCopilotAction({
-    name: "kyberSwapOverview",
-    description:
-      "Get a comprehensive overview of all available KyberSwap actions and supported features.",
-    parameters: [],
-    handler: async () => {
-      const isWalletConnected = isConnected && address;
+  //       return `🌐 KyberSwap Aggregator - Complete Integration Overview
 
-      return `🌐 KyberSwap Aggregator - Complete Integration Overview
+  // ${isWalletConnected ? "✅" : "❌"} Wallet Status: ${
+  //         isWalletConnected ? `Connected (${address})` : "Not Connected"
+  //       }
 
-${isWalletConnected ? "✅" : "❌"} Wallet Status: ${
-        isWalletConnected ? `Connected (${address})` : "Not Connected"
-      }
+  // 📋 **Available Actions**:
 
-📋 **Available Actions**:
+  // 🔍 **Quote & Analysis** (getKyberSwapQuote)
+  //    • Get best swap rates across multiple DEXes
+  //    • Compare prices and routes before trading
+  //    • View gas costs and price impact
 
-🔍 **Quote & Analysis** (getKyberSwapQuote)
-   • Get best swap rates across multiple DEXes
-   • Compare prices and routes before trading
-   • View gas costs and price impact
+  // ⚡ **Execute Swaps** (executeKyberSwap)
+  //    • Perform actual token swaps on-chain
+  //    • Customizable slippage tolerance
+  //    • Automatic route optimization
 
-⚡ **Execute Swaps** (executeKyberSwap)
-   • Perform actual token swaps on-chain
-   • Customizable slippage tolerance
-   • Automatic route optimization
+  // 🪙 **Token Information** (getTokenInfo)
+  //    • Get token prices and metadata
+  //    • Check trading availability
+  //    • Verify token contracts
 
-🪙 **Token Information** (getTokenInfo)
-   • Get token prices and metadata
-   • Check trading availability
-   • Verify token contracts
+  // 📊 **Common Tokens** (getCommonTokens)
+  //    • Access popular token addresses
+  //    • Support for multiple chains
+  //    • Quick reference for major tokens
 
-📊 **Common Tokens** (getCommonTokens)
-   • Access popular token addresses
-   • Support for multiple chains
-   • Quick reference for major tokens
+  // 📈 **Compare Options** (compareSwapOptions)
+  //    • Compare different swap amounts
+  //    • Find optimal trading sizes
+  //    • Analyze rate efficiency
 
-📈 **Compare Options** (compareSwapOptions)
-   • Compare different swap amounts
-   • Find optimal trading sizes
-   • Analyze rate efficiency
+  // 🌍 **Supported Networks**:
+  //    • Ethereum (ETH) - Chain ID: 1
+  //    • Polygon (MATIC) - Chain ID: 137
+  //    • BSC (BNB) - Chain ID: 56
+  //    • Arbitrum (ETH) - Chain ID: 42161
+  //    • Optimism (ETH) - Chain ID: 10
+  //    • Avalanche (AVAX) - Chain ID: 43114
+  //    • Base (ETH) - Chain ID: 8453
+  //    • And many more...
 
-🌍 **Supported Networks**:
-   • Ethereum (ETH) - Chain ID: 1
-   • Polygon (MATIC) - Chain ID: 137
-   • BSC (BNB) - Chain ID: 56
-   • Arbitrum (ETH) - Chain ID: 42161
-   • Optimism (ETH) - Chain ID: 10
-   • Avalanche (AVAX) - Chain ID: 43114
-   • Base (ETH) - Chain ID: 8453
-   • And many more...
+  // 🔧 **Key Features**:
+  //    • Aggregates liquidity from 100+ DEXes
+  //    • Finds optimal swap routes automatically
+  //    • Minimal price impact through smart routing
+  //    • Gas-optimized transactions
+  //    • MEV protection capabilities
 
-🔧 **Key Features**:
-   • Aggregates liquidity from 100+ DEXes
-   • Finds optimal swap routes automatically
-   • Minimal price impact through smart routing
-   • Gas-optimized transactions
-   • MEV protection capabilities
+  // 💰 **Benefits**:
+  //    • Best rates across all DEXes
+  //    • Single transaction execution
+  //    • Reduced gas costs through batching
+  //    • Higher success rates
+  //    • Real-time pricing
 
-💰 **Benefits**:
-   • Best rates across all DEXes
-   • Single transaction execution
-   • Reduced gas costs through batching
-   • Higher success rates
-   • Real-time pricing
+  // 🎯 **Quick Start Guide**:
+  //    1. Use 'getCommonTokens' to find token addresses
+  //    2. Get quotes with 'getKyberSwapQuote'
+  //    3. Compare options with 'compareSwapOptions'
+  //    4. Execute swaps with 'executeKyberSwap'
 
-🎯 **Quick Start Guide**:
-   1. Use 'getCommonTokens' to find token addresses
-   2. Get quotes with 'getKyberSwapQuote'
-   3. Compare options with 'compareSwapOptions'
-   4. Execute swaps with 'executeKyberSwap'
+  // ${
+  //   !isWalletConnected
+  //     ? "\n⚠️  **Note:** Connect your wallet to access swap execution features!"
+  //     : "\n🚀 **Ready to trade!** All features available with your connected wallet."
+  // }
 
-${
-  !isWalletConnected
-    ? "\n⚠️  **Note:** Connect your wallet to access swap execution features!"
-    : "\n🚀 **Ready to trade!** All features available with your connected wallet."
-}
+  // 🔗 **Resources**:
+  //    • KyberSwap: https://kyberswap.com
+  //    • Documentation: https://docs.kyberswap.com
+  //    • Analytics: https://analytics.kyberswap.com
 
-🔗 **Resources**:
-   • KyberSwap: https://kyberswap.com
-   • Documentation: https://docs.kyberswap.com
-   • Analytics: https://analytics.kyberswap.com
+  // 💡 **Pro Tip**: Always compare quotes and check gas costs before executing large swaps!`;
+  //     },
+  //   });
 
-💡 **Pro Tip**: Always compare quotes and check gas costs before executing large swaps!`;
-    },
-  });
-
-  const test = async () => {
-    try {
-      console.log("🧪 Testing extracted handler functions...");
-
-      // Test 1: Get common tokens
-      // console.log("📝 Test 1: Getting common tokens for Ethereum...");
-      // const commonTokensResult = await handleGetCommonTokens({
-      //   platform: "ethereum",
-      // });
-      // console.log("Common Tokens Result:", commonTokensResult);
-
-      // // Test 2: Get swap quote
-      // console.log("📝 Test 2: Getting swap quote for ETH → USDC...");
-      // const quoteResult = await handleGetKyberSwapQuoteBySymbol({
-      //   tokenInSymbol: "ETH",
-      //   tokenOutSymbol: "USDC",
-      //   amount: "1",
-      //   platform: "ethereum",
-      // });
-      // console.log("Quote Result:", quoteResult);
-
-      // // Test 3: Test CoinGecko integration
-      // console.log("📝 Test 3: Testing CoinGecko integration...");
-      // const tokenOutData = await getContractAddressWithDecimals(
-      //   "USDC",
-      //   "ethereum"
-      // );
-      // console.log("USDC Data:", tokenOutData);
-
-      // // Test 4: Execute swap preparation (if wallet connected)
-      if (isConnected && address) {
-        console.log("📝 Test 4: Testing swap execution preparation...");
-        try {
-          const executeResult = await handleExecuteKyberSwapBySymbol({
-            tokenInSymbol: "ETH",
-            tokenOutSymbol: "USDC",
-            amount: "0.0001",
-            platform: "ethereum",
-            slippageTolerance: 50,
-          });
-          console.log("Execute Result:", executeResult);
-        } catch (error) {
-          console.log(
-            "Execute test failed (expected if no real wallet):",
-            error
-          );
-        }
-      } else {
-        console.log("📝 Test 4: Skipped - Wallet not connected");
-      }
-
-      console.log(
-        "✅ All tests completed! Check console for detailed results."
-      );
-    } catch (error) {
-      console.error("❌ Test failed:", error);
-    }
-  };
-
-  const testSwap = async () => {
-    const result = await handleExecuteKyberSwap({
-      tokenOut: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", // USDC
-      tokenIn: "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE", // ETH
-      amount: "0.0001", // 0.0001 ETH
-      slippageTolerance: 50, // 0.5%
-      chainId: 1, // Ethereum
-    });
-
-    console.log(result);
-  };
   // Test UI Component
   return (
-    <div className="flex flex-col gap-4 p-6 bg-gradient-to-br from-green-50 to-emerald-100 rounded-xl border border-green-200">
-      <div className="flex items-center gap-3">
-        <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
-          <span className="text-white font-bold text-sm">K</span>
-        </div>
-        <h2 className="text-2xl font-bold text-gray-800">
-          KyberSwap Aggregator
-        </h2>
-      </div>
+    // <div className="flex flex-col gap-4 p-6 bg-gradient-to-br from-green-50 to-emerald-100 rounded-xl border border-green-200">
+    //   <div className="flex items-center gap-3">
+    //     <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
+    //       <span className="text-white font-bold text-sm">K</span>
+    //     </div>
+    //     <h2 className="text-2xl font-bold text-gray-800">
+    //       KyberSwap Aggregator
+    //     </h2>
+    //   </div>
 
-      <div className="text-gray-600 mb-4">
-        Comprehensive token swapping integration with KyberSwap&apos;s
-        aggregator for optimal rates across 100+ DEXes on multiple chains.
-      </div>
+    //   <div className="text-gray-600 mb-4">
+    //     Comprehensive token swapping integration with KyberSwap&apos;s
+    //     aggregator for optimal rates across 100+ DEXes on multiple chains.
+    //   </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-white p-4 rounded-lg shadow-sm border">
-          <h3 className="font-semibold text-gray-800 mb-2">
-            🔍 Trading Actions
-          </h3>
-          <ul className="text-sm text-gray-600 space-y-1">
-            <li>• Get Swap Quotes (getKyberSwapQuote)</li>
-            <li>• Execute Swaps (executeKyberSwap)</li>
-            <li>• Compare Options (compareSwapOptions)</li>
-            <li>• Token Information (getTokenInfo)</li>
-          </ul>
-        </div>
+    //   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    //     <div className="bg-white p-4 rounded-lg shadow-sm border">
+    //       <h3 className="font-semibold text-gray-800 mb-2">
+    //         🔍 Trading Actions
+    //       </h3>
+    //       <ul className="text-sm text-gray-600 space-y-1">
+    //         <li>• Get Swap Quotes (getKyberSwapQuote)</li>
+    //         <li>• Execute Swaps (executeKyberSwap)</li>
+    //         <li>• Compare Options (compareSwapOptions)</li>
+    //         <li>• Token Information (getTokenInfo)</li>
+    //       </ul>
+    //     </div>
 
-        <div className="bg-white p-4 rounded-lg shadow-sm border">
-          <h3 className="font-semibold text-gray-800 mb-2">
-            🌐 Multi-Chain Support
-          </h3>
-          <ul className="text-sm text-gray-600 space-y-1">
-            <li>• Ethereum, Polygon, BSC</li>
-            <li>• Arbitrum, Optimism, Base</li>
-            <li>• Avalanche, Fantom, Linea</li>
-            <li>• Common Tokens (getCommonTokens)</li>
-          </ul>
-        </div>
-      </div>
+    //     <div className="bg-white p-4 rounded-lg shadow-sm border">
+    //       <h3 className="font-semibold text-gray-800 mb-2">
+    //         🌐 Multi-Chain Support
+    //       </h3>
+    //       <ul className="text-sm text-gray-600 space-y-1">
+    //         <li>• Ethereum, Polygon, BSC</li>
+    //         <li>• Arbitrum, Optimism, Base</li>
+    //         <li>• Avalanche, Fantom, Linea</li>
+    //         <li>• Common Tokens (getCommonTokens)</li>
+    //       </ul>
+    //     </div>
+    //   </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mt-4">
-        <button className="bg-green-500 hover:bg-green-600 text-white rounded-lg p-3 transition-colors text-sm font-medium">
-          📊 100+ DEXes
-        </button>
-        <button className="bg-blue-500 hover:bg-blue-600 text-white rounded-lg p-3 transition-colors text-sm font-medium">
-          ⚡ Optimal Routes
-        </button>
-        <button className="bg-purple-500 hover:bg-purple-600 text-white rounded-lg p-3 transition-colors text-sm font-medium">
-          🌍 Multi-Chain
-        </button>
-        <button
-          onClick={testSwap}
-          className="bg-orange-500 hover:bg-orange-600 text-white rounded-lg p-3 transition-colors text-sm font-medium"
-        >
-          🔒 MEV Protection
-        </button>
-      </div>
+    //   <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mt-4">
+    //     <button className="bg-green-500 hover:bg-green-600 text-white rounded-lg p-3 transition-colors text-sm font-medium">
+    //       📊 100+ DEXes
+    //     </button>
+    //     <button className="bg-blue-500 hover:bg-blue-600 text-white rounded-lg p-3 transition-colors text-sm font-medium">
+    //       ⚡ Optimal Routes
+    //     </button>
+    //     <button className="bg-purple-500 hover:bg-purple-600 text-white rounded-lg p-3 transition-colors text-sm font-medium">
+    //       🌍 Multi-Chain
+    //     </button>
+    //     <button
+    //       onClick={testSwap}
+    //       className="bg-orange-500 hover:bg-orange-600 text-white rounded-lg p-3 transition-colors text-sm font-medium"
+    //     >
+    //       🔒 MEV Protection
+    //     </button>
+    //   </div>
 
-      {!isConnected && (
-        <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-lg">
-          <div className="flex items-center gap-2">
-            <span className="text-lg">⚠️</span>
-            <span className="font-medium">
-              Connect your wallet to execute swaps and access all trading
-              features
-            </span>
-          </div>
-        </div>
-      )}
+    //   {!isConnected && (
+    //     <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-lg">
+    //       <div className="flex items-center gap-2">
+    //         <span className="text-lg">⚠️</span>
+    //         <span className="font-medium">
+    //           Connect your wallet to execute swaps and access all trading
+    //           features
+    //         </span>
+    //       </div>
+    //     </div>
+    //   )}
 
-      {isConnected && (
-        <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg">
-          <div className="flex items-center gap-2">
-            <span className="text-lg">✅</span>
-            <span className="font-medium">
-              Wallet connected! All KyberSwap features are available.
-            </span>
-          </div>
-          <div className="text-sm mt-1 text-green-700">
-            Connected as: {address}
-          </div>
-        </div>
-      )}
+    //   {isConnected && (
+    //     <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg">
+    //       <div className="flex items-center gap-2">
+    //         <span className="text-lg">✅</span>
+    //         <span className="font-medium">
+    //           Wallet connected! All KyberSwap features are available.
+    //         </span>
+    //       </div>
+    //       <div className="text-sm mt-1 text-green-700">
+    //         Connected as: {address}
+    //       </div>
+    //     </div>
+    //   )}
 
-      <div className="mt-4 p-4 bg-green-50 rounded-lg border border-green-200">
-        <h4 className="font-semibold text-green-800 mb-2">
-          🚀 Quick Start Guide
-        </h4>
-        <ol className="text-sm text-green-700 space-y-1 list-decimal list-inside">
-          <li>
-            Ask for &ldquo;kyberSwapOverview&rdquo; to see all capabilities
-          </li>
-          <li>
-            Use &ldquo;getCommonTokens&rdquo; to find popular token addresses
-          </li>
-          <li>
-            Get quotes with &ldquo;getKyberSwapQuote&rdquo; before swapping
-          </li>
-          <li>
-            Compare amounts with &ldquo;compareSwapOptions&rdquo; for
-            optimization
-          </li>
-          <li>
-            Execute swaps with &ldquo;executeKyberSwap&rdquo; for best rates
-          </li>
-        </ol>
-      </div>
+    //   <div className="mt-4 p-4 bg-green-50 rounded-lg border border-green-200">
+    //     <h4 className="font-semibold text-green-800 mb-2">
+    //       🚀 Quick Start Guide
+    //     </h4>
+    //     <ol className="text-sm text-green-700 space-y-1 list-decimal list-inside">
+    //       <li>
+    //         Ask for &ldquo;kyberSwapOverview&rdquo; to see all capabilities
+    //       </li>
+    //       <li>
+    //         Use &ldquo;getCommonTokens&rdquo; to find popular token addresses
+    //       </li>
+    //       <li>
+    //         Get quotes with &ldquo;getKyberSwapQuote&rdquo; before swapping
+    //       </li>
+    //       <li>
+    //         Compare amounts with &ldquo;compareSwapOptions&rdquo; for
+    //         optimization
+    //       </li>
+    //       <li>
+    //         Execute swaps with &ldquo;executeKyberSwap&rdquo; for best rates
+    //       </li>
+    //     </ol>
+    //   </div>
 
-      <div className="mt-2 p-4 bg-blue-50 rounded-lg border border-blue-200">
-        <h4 className="font-semibold text-blue-800 mb-2">💡 Pro Features</h4>
-        <ul className="text-sm text-blue-700 space-y-1 list-disc list-inside">
-          <li>**Smart Routing**: Automatic best path finding across DEXes</li>
-          <li>**Gas Optimization**: Minimized transaction costs</li>
-          <li>**Price Impact**: Real-time slippage calculations</li>
-          <li>**Multi-Hop**: Complex routes for better rates</li>
-          <li>**Cross-Chain**: Support for 15+ blockchain networks</li>
-        </ul>
-      </div>
-    </div>
+    //   <div className="mt-2 p-4 bg-blue-50 rounded-lg border border-blue-200">
+    //     <h4 className="font-semibold text-blue-800 mb-2">💡 Pro Features</h4>
+    //     <ul className="text-sm text-blue-700 space-y-1 list-disc list-inside">
+    //       <li>**Smart Routing**: Automatic best path finding across DEXes</li>
+    //       <li>**Gas Optimization**: Minimized transaction costs</li>
+    //       <li>**Price Impact**: Real-time slippage calculations</li>
+    //       <li>**Multi-Hop**: Complex routes for better rates</li>
+    //       <li>**Cross-Chain**: Support for 15+ blockchain networks</li>
+    //     </ul>
+    //   </div>
+    // </div>
+    // <button
+    //   onClick={testSwap}
+    //   className="bg-orange-500 hover:bg-orange-600 text-white rounded-lg p-3 transition-colors text-sm font-medium"
+    // >
+    //   🔒 MEV Protection
+    // </button>
+    null
   );
 };
 

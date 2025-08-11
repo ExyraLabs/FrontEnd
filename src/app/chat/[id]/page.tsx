@@ -27,6 +27,8 @@ import McpServerManager from "@/components/McpServerManager";
 import Curve from "@/agents/Curve";
 import AlchemyAgent from "@/agents/Alchemy";
 import dynamic from "next/dynamic";
+import Knc from "@/agents/Knc";
+import { CopilotChat } from "@copilotkit/react-ui";
 
 const Lido = dynamic(() => import("@/agents/Lido"), {
   ssr: false,
@@ -54,7 +56,7 @@ const Page = () => {
   const messages = getMessages(id);
   const { visibleMessages, appendMessage, isLoading } = useCopilotChat({
     id: id,
-    initialMessages: messages,
+    // initialMessages: messages,
   });
 
   const scrollToBottom = () => {
@@ -166,7 +168,14 @@ const Page = () => {
       lidoStake: "/icons/Lido.png",
       stakeETH: "/icons/Lido.png",
 
-      // KyberSwap tools
+      // KyberSwap/KNC tools
+      getKyberSwapQuoteBySymbol: "/icons/kyber.png",
+      executeKyberSwapBySymbol: "/icons/kyber.png",
+      executeKyberSwap: "/icons/kyber.png",
+      getTokenInfo: "/icons/kyber.png",
+      getCommonTokens: "/icons/kyber.png",
+      compareSwapOptions: "/icons/kyber.png",
+      kyberSwapOverview: "/icons/kyber.png",
       kyberSwap: "/icons/kyber.png",
       getKyberRates: "/icons/kyber.png",
 
@@ -179,6 +188,7 @@ const Page = () => {
       stake: "/icons/stake.svg",
       lend: "/icons/lend.svg",
 
+      // Alchemy tools
       getAccountBalance: "/icons/alchemy.svg",
 
       // Add more tool mappings as needed
@@ -676,8 +686,9 @@ const Page = () => {
       </motion.div>
 
       <ToolRenderer />
-      <Uniswap />
+      {/* <Uniswap /> */}
       <Lido />
+      <Knc />
       <AlchemyAgent />
       {/* <Curve /> */}
     </div>
