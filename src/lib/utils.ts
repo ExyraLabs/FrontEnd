@@ -226,40 +226,113 @@ export function addressToUuid(address: string): string {
 // ETHERS.JS APPROACH - Much simpler!
 
 // Helper function to get signer - multiple approaches
-export async function getSigner(): Promise<ethers.Signer | null> {
-  // Method 1: Using window.ethereum (MetaMask/injected wallet)
-  if (typeof window !== "undefined" && window.ethereum) {
+export async function getSigner(
+  expectedAddress?: string
+): Promise<ethers.Signer | null> {
+  if (typeof window === "undefined") return null;
+
+  // Narrow the injected window shape for TypeScript without using 'any'
+  interface InjectedEthereumProvider extends ethers.providers.ExternalProvider {
+    request?: (args: {
+      method: string;
+      params?: unknown[];
+    }) => Promise<unknown>;
+    isMetaMask?: boolean;
+    isPhantom?: boolean; // Phantom EVM flag (some versions)
+    isPhantomEthereum?: boolean; // Alternative Phantom flag
+    providers?: InjectedEthereumProvider[]; // MetaMask multi-provider pattern
+  }
+  interface PhantomNamespace {
+    ethereum?: InjectedEthereumProvider;
+  }
+  const w = window as unknown as {
+    ethereum?: InjectedEthereumProvider;
+    phantom?: PhantomNamespace;
+  };
+
+  const lowerExpected = expectedAddress?.toLowerCase();
+
+  // Helper: attempt to get signer from a raw injected provider object
+  const tryProvider = async (
+    rawProvider: InjectedEthereumProvider | undefined,
+    requestAccess = false
+  ): Promise<ethers.Signer | null> => {
+    if (!rawProvider) return null;
     try {
-      // First, request account access if needed
-      const ethereum = window.ethereum as {
-        request: (args: {
-          method: string;
-          params?: unknown[];
-        }) => Promise<unknown>;
-      };
-      await ethereum.request({ method: "eth_requestAccounts" });
+      if (requestAccess) {
+        await rawProvider.request?.({ method: "eth_requestAccounts" });
+      } else {
+        await rawProvider.request?.({ method: "eth_accounts" });
+      }
+      const web3Provider = new ethers.providers.Web3Provider(rawProvider);
 
-      // Create provider and get signer
-      const provider = new ethers.providers.Web3Provider(
-        window.ethereum as ethers.providers.ExternalProvider
-      );
-      const signer = provider.getSigner();
+      if (lowerExpected) {
+        const res = await rawProvider.request?.({
+          method: "eth_accounts",
+        });
+        const accounts = Array.isArray(res)
+          ? (res as unknown[]).filter((x): x is string => typeof x === "string")
+          : [];
+        if (accounts.map((a) => a.toLowerCase()).includes(lowerExpected)) {
+          return web3Provider.getSigner();
+        }
+        return null; // expected not matched
+      }
+      return web3Provider.getSigner();
+    } catch {
+      return null;
+    }
+  };
 
-      // Test that we can get the address (this will throw if no account is connected)
-      await signer.getAddress();
+  // 1. Multiple providers pattern (EIP-1193 multiplexing)
+  const multi = w.ethereum?.providers;
+  if (multi && multi.length) {
+    // If expected address provided, try to find the provider already connected to it first
+    if (lowerExpected) {
+      for (const p of multi) {
+        const signer = await tryProvider(p, false);
+        if (signer) {
+          try {
+            if ((await signer.getAddress()).toLowerCase() === lowerExpected) {
+              return signer;
+            }
+          } catch {}
+        }
+      }
+    }
 
-      return signer;
-    } catch (error) {
-      console.error("Error getting signer from injected wallet:", error);
+    // Prefer Phantom if present
+    const phantomProv = multi.find((p) => p.isPhantom || p.isPhantomEthereum);
+    if (phantomProv) {
+      const phantomSigner = await tryProvider(phantomProv, !lowerExpected);
+      if (phantomSigner) return phantomSigner;
+    }
+
+    // Fallback to MetaMask
+    const metamaskProv = multi.find((p) => p.isMetaMask);
+    if (metamaskProv) {
+      const mmSigner = await tryProvider(metamaskProv, !lowerExpected);
+      if (mmSigner) return mmSigner;
+    }
+
+    // Or the first available
+    for (const p of multi) {
+      const s = await tryProvider(p, !lowerExpected);
+      if (s) return s;
     }
   }
 
-  // Method 2: Using wagmi's connector (if you're using wagmi elsewhere)
-  // This would require wagmi context, so it's more complex
+  // 2. Dedicated Phantom EVM provider (phantom injects window.phantom.ethereum)
+  if (w.phantom?.ethereum) {
+    const phantomSigner = await tryProvider(w.phantom.ethereum, !lowerExpected);
+    if (phantomSigner) return phantomSigner;
+  }
 
-  // Method 3: Connect to specific RPC (read-only, would need private key for signing)
-  // const provider = new ethers.JsonRpcProvider('https://mainnet.infura.io/v3/YOUR_KEY');
-  // const signer = new ethers.Wallet('PRIVATE_KEY', provider);
+  // 3. Single provider on window.ethereum (could be MetaMask or something else)
+  if (w.ethereum) {
+    const singleSigner = await tryProvider(w.ethereum, true);
+    if (singleSigner) return singleSigner;
+  }
 
   return null;
 }
@@ -286,7 +359,7 @@ export async function getTokenApprovalEthers(
     }
 
     // Get signer if not provided
-    const actualSigner = signer || (await getSigner());
+    const actualSigner = signer || (await getSigner(userAddress));
     if (!actualSigner) {
       throw new Error("No signer available");
     }

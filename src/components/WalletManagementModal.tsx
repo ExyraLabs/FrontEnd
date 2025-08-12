@@ -2,6 +2,8 @@
 import React, { useState } from "react";
 import Image from "next/image";
 import { WalletAsset } from "../hooks/useWalletAssets";
+import { Icon } from "@iconify/react";
+import { useAppKit } from "@reown/appkit/react";
 
 interface WalletManagementModalProps {
   isOpen: boolean;
@@ -26,6 +28,7 @@ const WalletManagementModal: React.FC<WalletManagementModalProps> = ({
 }) => {
   const [searchToken, setSearchToken] = useState("");
   const [imageErrors, setImageErrors] = useState<Set<string>>(new Set());
+  const { open } = useAppKit();
 
   const handleImageError = (symbol: string) => {
     setImageErrors((prev) => new Set(prev).add(symbol));
@@ -86,13 +89,20 @@ const WalletManagementModal: React.FC<WalletManagementModalProps> = ({
             className="text-white"
           />
         </div>
-        <div className="flex items-center gap-2">
-          <button className="text-white ml-auto">Manage</button>
-          <Image src="/icons/r_arrow.svg" alt="Arrow" width={8} height={5} />
-        </div>
+        <button
+          onClick={() => open()}
+          className="flex text-white duration-300 hover:text-[#9A9C9C] cursor-pointer  items-center gap-2"
+        >
+          <Icon
+            className=""
+            width={24}
+            height={24}
+            icon="material-symbols-light:power-settings-circle"
+          />
+        </button>
       </div>
 
-      {/* Loading State */}
+      {/* L()=>oading() State */}
       {loading && (
         <div className="flex items-center justify-center py-8">
           <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white"></div>

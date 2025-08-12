@@ -20,15 +20,17 @@ import {
 import {
   useCopilotChat,
   useCopilotMessagesContext,
+  // internal context gives access to registered actions & their render fns
+  useCopilotContext,
 } from "@copilotkit/react-core";
 import { BaseMessage, CombinedToolCall } from "../../../../types";
-import Uniswap from "@/agents/Uniswap";
-import McpServerManager from "@/components/McpServerManager";
-import Curve from "@/agents/Curve";
-import AlchemyAgent from "@/agents/Alchemy";
+// import Uniswap from "@/agents/Uniswap"; // unused currently
+// import McpServerManager from "@/components/McpServerManager"; // unused currently
+// import Curve from "@/agents/Curve"; // unused currently
+import AlchemyAgent from "@/agents/Alchemy"; // keep used component
 import dynamic from "next/dynamic";
 import Knc from "@/agents/Knc";
-import { CopilotChat } from "@copilotkit/react-ui";
+// import { CopilotChat } from "@copilotkit/react-ui"; // not used in custom UI
 
 const Lido = dynamic(() => import("@/agents/Lido"), {
   ssr: false,
@@ -58,6 +60,10 @@ const Page = () => {
     id: id,
     // initialMessages: messages,
   });
+  // Access actions registry (includes render / renderAndWait transformed actions)
+  // Access registered actions (casting to any since internal types not exported fully)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { actions: registeredActions } = useCopilotContext() as any;
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -140,6 +146,26 @@ const Page = () => {
 
   const displayMessages = getDisplayMessages();
 
+  // Identify the single currently active (latest) pending interactive action (renderAndWaitForResponse)
+  const activeInteractiveActionId = React.useMemo(() => {
+    let candidate: string | null = null;
+    for (const msg of displayMessages) {
+      const mType =
+        (msg as BaseMessage)?.type || (msg as any).constructor?.name; // eslint-disable-line @typescript-eslint/no-explicit-any
+      if (mType === "CombinedToolCall" && !(msg as CombinedToolCall).result) {
+        const actionEntry = Object.values(registeredActions || {}).find(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (a: any) => a.name === (msg as any).name
+        ) as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+        if (actionEntry?._isRenderAndWait) {
+          // Because displayMessages is time-sorted ascending, keep updating to get latest pending
+          candidate = (msg as any).id; // eslint-disable-line @typescript-eslint/no-explicit-any
+        }
+      }
+    }
+    return candidate;
+  }, [displayMessages, registeredActions]);
+
   // Tool icon mapping based on tool name
   const getToolIcon = (toolName: string): string | null => {
     const toolIconMapping: Record<string, string> = {
@@ -204,6 +230,38 @@ const Page = () => {
     if (messageType === "CombinedToolCall") {
       const toolCall = message as CombinedToolCall;
       const toolIcon = getToolIcon(toolCall.name);
+      // Attempt to find the corresponding registered action by name (actions keyed by internal id)
+      const actionEntry = Object.values(registeredActions || {}).find(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (a: any) => a.name === toolCall.name
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ) as any;
+
+      let interactiveElement: React.ReactElement | null = null;
+      const isPending = !toolCall.result;
+      const isInteractive = actionEntry?._isRenderAndWait;
+      const isActive =
+        isPending && isInteractive && toolCall.id === activeInteractiveActionId;
+      if (isActive && typeof actionEntry?.render === "function") {
+        try {
+          // Only the active pending interactive action gets executed with 'executing' status
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const args = (toolCall as any).arguments || {};
+          interactiveElement = actionEntry.render({
+            name: toolCall.name,
+            args,
+            status: "executing",
+            result: undefined,
+            messageId: toolCall.id,
+          });
+        } catch (e) {
+          console.warn(
+            "Failed to render interactive action UI for",
+            toolCall.name,
+            e
+          );
+        }
+      }
 
       // Check if the result contains error indicators
       const resultContent = toolCall.result?.result || "";
@@ -235,7 +293,7 @@ const Page = () => {
         return (
           <div
             key={`tool-${message.id}-${index}`}
-            className="flex items-center gap-2 mb-2 text-gray-400 text-sm"
+            className="flex  relative items-center gap-2 mb-2 text-gray-400 text-sm"
           >
             <div className="w-3 h-3 border border-gray-400 border-t-transparent rounded-full animate-spin"></div>
             {toolIcon && (
@@ -247,7 +305,12 @@ const Page = () => {
                 className="rounded-sm"
               />
             )}
-            <span>Running {toolCall.name}...</span>
+            <span>{toolCall.name}...</span>
+            {interactiveElement && (
+              <div className="mt-10 absolute left-0 top-full w-max z-50">
+                {interactiveElement}
+              </div>
+            )}
           </div>
         );
       }
@@ -255,7 +318,7 @@ const Page = () => {
       return (
         <div
           key={`tool-${message.id}-${index}`}
-          className="flex items-center gap-2 mb-2 text-gray-300 text-sm"
+          className="flex relative items-center gap-2 mb-2 text-gray-300 text-sm"
         >
           <span
             className={
@@ -275,16 +338,8 @@ const Page = () => {
               className="rounded-sm"
             />
           )}
-          <span>
-            {toolCall.name}
-            {/* {toolCall.result?.result && isSuccess && (
-              <span className="text-gray-400">
-                {" "}
-                - {toolCall.result.result.slice(0, 60)}
-                {toolCall.result.result.length > 60 ? "..." : ""}
-              </span>
-            )} */}
-          </span>
+          <span>{toolCall.name}</span>
+          {/* Completed actions do not render interactive UI */}
         </div>
       );
     }
@@ -544,7 +599,7 @@ const Page = () => {
 
         {/* AI Thinking Animation */}
         {isLoading && (
-          <div className="flex flex-col w-max max-w-[600px] self-start">
+          <div className="flex flex-col  w-max max-w-[600px] self-start">
             <div className="flex items-center gap-3 py-4">
               <div className="flex items-center gap-1">
                 <motion.div

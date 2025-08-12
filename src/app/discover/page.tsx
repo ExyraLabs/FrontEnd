@@ -38,28 +38,28 @@ const AGENT_CARDS = [
     ],
     prompts: [
       // "How can I stake my ETH?",
-      "How can I participate in DeFi with stETH?",
+      "Withdraw all Lido stETH in my wallet",
       "Stake $4 worth of ETH for me",
     ],
     chains: ["Ethereum"],
   },
-  {
-    icon: "/icons/uniswap.png",
-    title: "Uniswap",
-    subtitle: "Decentralized exchange for swapping tokens",
-    category: "Swap",
-    features: [
-      // "Swap any ERC-20 token instantly",
-      "Provide liquidity and earn fees",
-      "Access deep liquidity pools",
-    ],
-    prompts: [
-      // "Swap 10 USDC to ETH",
-      "Swap $4 worth of ETH for SKYOPS token for me",
-      "Swap 0.0002ETH to USDT",
-    ],
-    chains: ["Ethereum", "Arbitrum", "Optimism"],
-  },
+  // {
+  //   icon: "/icons/uniswap.png",
+  //   title: "Uniswap",
+  //   subtitle: "Decentralized exchange for swapping tokens",
+  //   category: "Swap",
+  //   features: [
+  //     // "Swap any ERC-20 token instantly",
+  //     "Provide liquidity and earn fees",
+  //     "Access deep liquidity pools",
+  //   ],
+  //   prompts: [
+  //     // "Swap 10 USDC to ETH",
+  //     "Swap $4 worth of ETH for SKYOPS token for me",
+  //     "Swap 0.0002ETH to USDT",
+  //   ],
+  //   chains: ["Ethereum", "Arbitrum", "Optimism"],
+  // },
   {
     icon: "/icons/kyber.png",
     title: "KyberSwap",
@@ -73,7 +73,7 @@ const AGENT_CARDS = [
     prompts: [
       // "Swap 5 BNB to USDT on BSC",
       "Show KyberSwap rates for ETH/USDT",
-      "Provide liquidity for MATIC/USDT",
+      "Swap 0.001 ETH to USDT on Ethereum",
     ],
     chains: ["Ethereum", "BNB Smart Chain", "Base"],
   },
@@ -89,7 +89,7 @@ const AGENT_CARDS = [
     ],
     prompts: [
       "What is the current price of Bitcoin?",
-      "What is the market cap of Ethereum?",
+      "What is the brand image for the skyops token?",
     ],
     chains: ["Ethereum", "BNB Smart Chain", "Base"],
   },
@@ -120,57 +120,57 @@ const AGENT_CARDS = [
       "Query NFT metadata and ownership",
     ],
     prompts: [
-      "Get my wallet's transaction history",
+      "Get all token balances in my wallet,",
       // "Show me NFTs in my wallet",
       "Check the balance of my address",
     ],
     chains: ["Ethereum", "Arbitrum", "Optimism", "Solana"],
   },
-  {
-    icon: "/icons/curve.jpeg",
-    title: "Curve Finance",
-    subtitle: "Efficient stablecoin and like-asset trading",
-    category: "Provide LP",
-    features: [
-      "Trade stablecoins with minimal slippage",
-      "Provide liquidity to earn trading fees",
-      "Access deep liquidity for stable assets",
-    ],
-    prompts: [
-      "Show me available Curve pools",
-      "Provide liquidity to the 3pool",
-    ],
-    chains: ["Ethereum", "Arbitrum", "Optimism"],
-  },
-  {
-    icon: "/icons/bridge.svg",
-    title: "Cross-Chain Bridge",
-    subtitle: "Bridge assets across different blockchains",
-    category: "Bridge",
-    features: [
-      "Bridge tokens between Ethereum and Layer 2s",
-      "Support for multiple chains",
-      "Secure cross-chain transfers",
-    ],
-    prompts: [
-      "Bridge 0.1 ETH from Ethereum to Arbitrum",
-      "What are the bridge fees for USDC?",
-    ],
-    chains: ["Ethereum", "Arbitrum", "Optimism", "Base"],
-  },
-  {
-    icon: "/icons/lend.svg",
-    title: "Aave Protocol",
-    subtitle: "Decentralized lending and borrowing platform",
-    category: "Lend",
-    features: [
-      "Lend crypto assets to earn interest",
-      "Borrow against your collateral",
-      "Access flash loans",
-    ],
-    prompts: ["Lend 100 USDC on Aave", "What are the current lending rates?"],
-    chains: ["Ethereum", "Arbitrum", "Optimism"],
-  },
+  // {
+  //   icon: "/icons/curve.jpeg",
+  //   title: "Curve Finance",
+  //   subtitle: "Efficient stablecoin and like-asset trading",
+  //   category: "Provide LP",
+  //   features: [
+  //     "Trade stablecoins with minimal slippage",
+  //     "Provide liquidity to earn trading fees",
+  //     "Access deep liquidity for stable assets",
+  //   ],
+  //   prompts: [
+  //     "Show me available Curve pools",
+  //     "Provide liquidity to the 3pool",
+  //   ],
+  //   chains: ["Ethereum", "Arbitrum", "Optimism"],
+  // },
+  // {
+  //   icon: "/icons/bridge.svg",
+  //   title: "Cross-Chain Bridge",
+  //   subtitle: "Bridge assets across different blockchains",
+  //   category: "Bridge",
+  //   features: [
+  //     "Bridge tokens between Ethereum and Layer 2s",
+  //     "Support for multiple chains",
+  //     "Secure cross-chain transfers",
+  //   ],
+  //   prompts: [
+  //     "Bridge 0.1 ETH from Ethereum to Arbitrum",
+  //     "What are the bridge fees for USDC?",
+  //   ],
+  //   chains: ["Ethereum", "Arbitrum", "Optimism", "Base"],
+  // },
+  // {
+  //   icon: "/icons/lend.svg",
+  //   title: "Aave Protocol",
+  //   subtitle: "Decentralized lending and borrowing platform",
+  //   category: "Lend",
+  //   features: [
+  //     "Lend crypto assets to earn interest",
+  //     "Borrow against your collateral",
+  //     "Access flash loans",
+  //   ],
+  //   prompts: ["Lend 100 USDC on Aave", "What are the current lending rates?"],
+  //   chains: ["Ethereum", "Arbitrum", "Optimism"],
+  // },
 ];
 
 const Explore = () => {

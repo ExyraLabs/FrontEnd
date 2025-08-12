@@ -1,6 +1,7 @@
 "use client";
 import { useAppKitAccount } from "@reown/appkit/react";
 import { parseUnits, formatUnits } from "viem";
+import { ethers } from "ethers";
 import { useCopilotAction } from "@copilotkit/react-core";
 import axios from "axios";
 import {
@@ -272,10 +273,6 @@ const Knc = () => {
     platform?: string;
     slippageTolerance?: number;
   }) => {
-    if (!isConnected || !address) {
-      return "❌ Wallet not connected. Please connect your wallet to execute swaps.";
-    }
-
     try {
       // Step 1: Resolve token addresses using symbols
       console.log(
@@ -331,12 +328,13 @@ const Knc = () => {
         // Import the ethers approval function
         const { getTokenApprovalEthers } = await import("@/lib/utils");
 
-        // Get approval for the router contract
+        // IMPORTANT: Pass the human-readable amount (NOT amountInWei) so approval parses correctly.
+        // amountInWei is already in base units; getTokenApprovalEthers internally calls parseUnits again.
         const approvalResult = await getTokenApprovalEthers(
-          address,
+          address as string,
           tokenInAddress,
           swapData.routerAddress,
-          amountInWei
+          amount
         );
 
         if (!approvalResult.success) {
@@ -359,7 +357,8 @@ const Knc = () => {
 
       // Get signer for transaction execution
       const { getSigner } = await import("@/lib/utils");
-      const signer = await getSigner();
+      // Pass the expected connected address so getSigner can choose the matching provider (e.g., Phantom vs MetaMask)
+      const signer = await getSigner(address);
 
       if (!signer) {
         return `❌ Unable to get wallet signer. Please ensure your wallet is connected.`;
@@ -371,11 +370,78 @@ const Knc = () => {
       console.log(`Router contract address: ${swapData.routerAddress}`);
 
       // Execute the swap transaction
-      const executeSwapTx = await signer.sendTransaction({
-        to: swapData.routerAddress,
-        data: swapData.data,
-        from: signerAddress,
-      });
+      // Pre-flight balance + allowance sanity check (helps diagnose TRANSFER_FROM_FAILED)
+      if (tokenInAddress !== "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE") {
+        try {
+          const erc20 = new ethers.Contract(
+            tokenInAddress,
+            [
+              "function balanceOf(address) view returns (uint256)",
+              "function allowance(address owner, address spender) view returns (uint256)",
+              "function decimals() view returns (uint8)",
+              "function symbol() view returns (string)",
+            ],
+            signer
+          );
+          const [bal, allowance, sym, dec] = await Promise.all([
+            erc20.balanceOf(signerAddress),
+            erc20.allowance(signerAddress, swapData.routerAddress),
+            erc20.symbol(),
+            erc20.decimals(),
+          ]);
+          console.log(
+            `🔎 Pre-flight ${sym} balance=${ethers.utils.formatUnits(
+              bal,
+              dec
+            )} allowance=${ethers.utils.formatUnits(
+              allowance,
+              dec
+            )} required=${ethers.utils.formatUnits(amountInWei, dec)}`
+          );
+          if (bal.lt(amountInWei)) {
+            return `❌ Insufficient ${sym} balance. Needed ${ethers.utils.formatUnits(
+              amountInWei,
+              dec
+            )}, have ${ethers.utils.formatUnits(bal, dec)}.`;
+          }
+          if (allowance.lt(amountInWei)) {
+            return `❌ Allowance decreased or insufficient before execution. Approved ${ethers.utils.formatUnits(
+              allowance,
+              dec
+            )} ${sym}, need ${ethers.utils.formatUnits(
+              amountInWei,
+              dec
+            )}. Re-run to refresh approval.`;
+          }
+        } catch (prefErr) {
+          console.log(
+            "Pre-flight balance/allowance check failed (continuing):",
+            prefErr
+          );
+        }
+      }
+
+      let executeSwapTx;
+      try {
+        executeSwapTx = await signer.sendTransaction({
+          to: swapData.routerAddress,
+          data: swapData.data,
+          from: signerAddress,
+        });
+      } catch (sendErr) {
+        const msg = (sendErr as Error).message || String(sendErr);
+        if (
+          /UNPREDICTABLE_GAS_LIMIT/i.test(msg) ||
+          /TRANSFER_FROM_FAILED/i.test(msg)
+        ) {
+          return `❌ Swap submission failed (gas estimation).\n\nRoot Cause Hint: Transfer failed when router attempted to pull tokens.\n\nLikely Reasons:\n  • Fee-on-transfer / taxed token reduced amount below required\n  • Token blacklists router or blocks aggregator contracts\n  • Balance changed between quote/build and execution\n  • Token requires a different function (supporting fee-on-transfer)\n\nWhat To Try:\n  1. Reduce amount (e.g. try 25-50% of current).\n  2. Increase slippage slightly (already using ${(
+            slippageTolerance / 100
+          ).toFixed(
+            2
+          )}%).\n  3. Re-run approval with a slightly higher amount (amount * 1.02).\n  4. Manually transfer a small test amount via a DEX UI to confirm token behavior.\n  5. If fee-on-transfer, aggregator may not support this token fully.\n\nRaw Error: ${msg}`;
+        }
+        throw sendErr; // let outer catch handle other errors
+      }
 
       console.log(
         `Swap transaction submitted with hash: ${executeSwapTx.hash}`
@@ -387,7 +453,7 @@ const Knc = () => {
         `Swap tx executed with hash: ${executeSwapTxReceipt?.blockHash}`
       );
 
-      return `✅ Swap Transaction Executed Successfully!`;
+      return `✅ Swap Transaction Executed Successfully! with hash: ${executeSwapTxReceipt?.blockHash}`;
     } catch (error) {
       console.error("KyberSwap execution error:", error);
       if (
@@ -398,116 +464,54 @@ const Knc = () => {
       }
       if (axios.isAxiosError(error)) {
         const errorMsg = error.response?.data?.message || error.message;
-        return `❌ Swap execution failed: ${errorMsg}`;
+
+        // Detect common insufficient output patterns that can be caused by:
+        //  • Buy / sell (transfer) tax tokens
+        //  • Too low slippage tolerance
+        //  • Sudden price movement / low liquidity
+        // TODO(future): Optional auto-retry with incremental slippage bumps.
+        //   Draft approach:
+        //     const candidateSlippages = [slippageTolerance, slippageTolerance+50, slippageTolerance+100, ...];
+        //     Iterate (max 3 attempts) ONLY if user has explicitly opted-in (e.g. UI confirmation or parameter flag).
+        //     Re-build route each attempt; abort if proposed slippage > 500 (5%) or price impact > threshold.
+        //     Provide a final summary of attempts & chosen slippage to the user.
+        //   Not implemented now to avoid unexpected higher-slippage executions.
+        const insufficientOutput =
+          /return amount is not enough|insufficient.*output|amountOut.*too low/i.test(
+            errorMsg
+          );
+
+        // Detect allowance / transfer related failures
+        const transferHelperFailed =
+          /transfer_from_failed|transferhelper: transfer_from_failed/i.test(
+            errorMsg
+          );
+
+        let remediation = "";
+        if (insufficientOutput) {
+          remediation = `\n\n⚠️ This token might have a buy / sell (transfer) tax or requires higher slippage.\n\nTry:\n  • Increase slippage tolerance (e.g. from 50 bips (0.5%) → 150–300 bips (1.5–3%))\n  • Check the token's tax (block explorer: read contract functions like 'taxFee', 'transferTax', or community docs)\n  • Reduce trade size to lessen price impact\n  • Re-run: executeKyberSwapBySymbol with a higher 'slippageTolerance' parameter\n  • Verify liquidity on a DEX / analytics site\n\nExample: executeKyberSwapBySymbol { tokenInSymbol: '${tokenInSymbol}', tokenOutSymbol: '${tokenOutSymbol}', amount: '${amount}', platform: '${platform}', slippageTolerance: ${Math.min(
+            slippageTolerance + 100,
+            slippageTolerance * 2
+          )} }`;
+        }
+
+        if (transferHelperFailed) {
+          remediation += `\n\n🛑 Transfer Helper Failure (TRANSFER_FROM_FAILED) detected. This usually means:\n  • Insufficient allowance (approval may have used wrong decimals)\n  • Token balance lower than requested amount\n  • Fee-on-transfer / taxed token reducing received amount\n  • Token blacklists router or blocks transfers\n\nFix Steps:\n  1. Re-run approval: ensure it matches the intended human amount (we now fixed double-scaling).\n  2. Try a smaller amount (e.g., reduce by 50%).\n  3. Manually verify allowance in block explorer (allowance(owner, router)).\n  4. If fee-on-transfer, raise slippage and re-quote.\n  5. Confirm you are on the correct chain and token address.`;
+        }
+
+        return `❌ Swap execution failed: ${errorMsg}${remediation}`;
+      }
+      // Non-Axios & not handled sendTransaction specific earlier
+      if (
+        error instanceof Error &&
+        (/UNPREDICTABLE_GAS_LIMIT/i.test(error.message) ||
+          /TRANSFER_FROM_FAILED/i.test(error.message))
+      ) {
+        return `❌ Swap failed (on-chain simulation).\nReason: ${error.message}\n\nDiagnostics Added:\n  • Checked balance & allowance before sending.\n  • If they were sufficient, token is likely fee-on-transfer or restrictive.\n\nNext Steps:\n  • Retry with smaller amount.\n  • If token taxed, raise slippage & re-quote.\n  • Validate token with a standard DEX swap manually.\n  • Inspect token contract for fees/blacklists (read functions like taxFee, totalFees, isBlacklisted).`;
       }
       return `❌ Unexpected error during swap execution: ${
         error instanceof Error ? error.message : "Unknown error"
       }`;
-    }
-  };
-
-  const handleGetCommonTokens = async ({
-    platform = "ethereum",
-  }: {
-    platform?: string;
-  }) => {
-    try {
-      // Get available platforms to validate input
-      const availablePlatforms = await getAvailablePlatforms("simple");
-      if (!availablePlatforms.includes(platform)) {
-        return `❌ Platform '${platform}' not supported.
-
-✅ **Supported Platforms**: ${availablePlatforms.slice(0, 10).join(", ")}${
-          availablePlatforms.length > 10
-            ? `, and ${availablePlatforms.length - 10} more...`
-            : ""
-        }
-
-💡 Use 'getAvailablePlatforms' to see the complete list.`;
-      }
-
-      // Common token symbols to look up
-      const commonSymbols = [
-        "ETH",
-        "WETH",
-        "USDC",
-        "USDT",
-        "DAI",
-        "WBTC",
-        "UNI",
-        "KNC",
-      ];
-      const tokenResults = [];
-
-      for (const symbol of commonSymbols) {
-        try {
-          const tokenData = await getContractAddressWithDecimals(
-            symbol,
-            platform
-          );
-          if (tokenData?.address) {
-            tokenResults.push({
-              symbol,
-              name: tokenData.name || symbol,
-              address: tokenData.address,
-              decimals: tokenData.decimals || 18,
-            });
-          }
-        } catch {
-          // Skip tokens that don't exist on this platform
-          console.log(`Token ${symbol} not found on ${platform}`);
-        }
-      }
-
-      if (tokenResults.length === 0) {
-        return `❌ No common tokens found on ${platform}.
-
-This could mean:
-  • Platform has limited token support
-  • CoinGecko API temporary issue
-  • Platform name needs adjustment
-
-Try using a major platform like 'ethereum', 'polygon-pos', or 'binance-smart-chain'.`;
-      }
-
-      const chainId = platformToChainId(platform);
-      const kyberChainName = getKyberChainName(chainId);
-
-      return `🪙 Common Tokens on ${
-        platform.charAt(0).toUpperCase() + platform.slice(1)
-      }:
-
-📍 **Network Info**:
-  • Platform: ${platform}
-  • Chain ID: ${chainId}
-  • KyberSwap Name: ${kyberChainName}
-
-💰 **Available Tokens**:
-${tokenResults
-  .map(
-    (token) =>
-      `  • **${token.symbol}** (${token.name})
-    Address: \`${token.address}\`
-    Decimals: ${token.decimals}`
-  )
-  .join("\n\n")}
-
-💡 **Usage Tips**:
-  • Use these addresses with KyberSwap actions
-  • Native tokens use: \`0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE\`
-  • All addresses are verified via CoinGecko
-
-🔄 Ready for trading with KyberSwap Aggregator!`;
-    } catch (error) {
-      console.error("Common tokens error:", error);
-      return `❌ Failed to fetch common tokens: ${
-        error instanceof Error ? error.message : "Unknown error"
-      }
-
-🔧 Try:
-  • Using 'ethereum' as the platform
-  • Checking your internet connection
-  • Using getAvailablePlatforms to see valid options`;
     }
   };
 
@@ -553,11 +557,12 @@ ${tokenResults
     description:
       "Test action to verify renderAndWaitForResponse and slippage UI works",
     parameters: [],
-    render: ({ status }) => {
+    renderAndWaitForResponse: ({ status, respond }) => {
       console.log("Test status:", status);
+      console.log("Respond:", respond);
 
       return (
-        <div className="bg-[#1A1A1A] border border-[#A9A0FF] rounded-[20px] p-6 max-w-md w-full mx-4">
+        <div className="bg-[#1A1A1A] border border-[#A9A0FF] rounded-[20px] p-6 max-w-md w-full">
           <div className="text-white text-center mb-4">
             🧪 Slippage UI Test (Status: {status})
           </div>
@@ -566,10 +571,26 @@ ${tokenResults
             your UI setup.
           </div>
           <div className="flex gap-3">
-            <button className="flex-1 bg-[#2E2E2E] text-gray-300 py-2 rounded-lg hover:bg-[#3E3E3E]">
+            <button
+              onClick={() => {
+                if (respond) {
+                  console.log("❌ User cancelled the operation");
+                  respond("❌ User cancelled the operation");
+                }
+              }}
+              className="flex-1 bg-[#2E2E2E] text-gray-300 py-2 rounded-lg hover:bg-[#3E3E3E]"
+            >
               Cancel
             </button>
-            <button className="flex-1 bg-[#A9A0FF] text-white py-2 rounded-lg hover:bg-[#9A8FFF]">
+            <button
+              onClick={() => {
+                if (respond) {
+                  console.log("✅ User confirmed the operation");
+                  respond("✅ User confirmed the operation");
+                }
+              }}
+              className="flex-1 bg-[#A9A0FF] text-white py-2 rounded-lg hover:bg-[#9A8FFF]"
+            >
               Confirm
             </button>
           </div>
@@ -620,7 +641,7 @@ ${tokenResults
       console.log("Status:", status); // Debug log
 
       // Show different UI based on status
-      if (status === "inProgress") {
+      if (status === "executing") {
         // Type check required parameters
         if (!tokenInSymbol || !tokenOutSymbol || !amount) {
           // Return error state as JSX
@@ -678,7 +699,7 @@ ${tokenResults
         );
       }
 
-      if (status === "executing") {
+      if (status === "inProgress") {
         // Show loading state during execution
         return (
           <div className="bg-[#1A1A1A] border border-[#A9A0FF]/20 rounded-[20px] p-6 max-w-md w-full mx-4">
@@ -1170,6 +1191,18 @@ ${tokenResults
   // 💡 **Pro Tip**: Always compare quotes and check gas costs before executing large swaps!`;
   //     },
   //   });
+
+  const testSwap = async () => {
+    const result = await handleExecuteKyberSwapBySymbol({
+      tokenOutSymbol: "USDC",
+      tokenInSymbol: "SKYOPS",
+      amount: "7580",
+      slippageTolerance: 5000,
+      platform: "ethereum",
+    });
+
+    console.log(result);
+  };
 
   // Test UI Component
   return (

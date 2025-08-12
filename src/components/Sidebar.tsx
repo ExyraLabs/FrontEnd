@@ -53,7 +53,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
       name: "Discover Agents",
       imgSrc: "/icons/explore.svg",
       width: 32,
-      href: "/explore",
+      href: "/discover",
       height: 32,
       icon: (
         <svg
@@ -984,7 +984,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
               {isClient && chatRooms.length > 0 ? (
                 (() => {
                   let totalShown = 0;
-                  const maxItems = 6;
+                  const maxItems = 5;
 
                   return (
                     <>
