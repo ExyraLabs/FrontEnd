@@ -1,28 +1,17 @@
 "use client";
 import Image from "next/image";
-import { useState } from "react";
-
-const TABS = [
-  "All",
-  "Execution",
-  "Research",
-  "Swap",
-  "Buy PT/VT",
-  "Lend",
-  "Bridge",
-  "Provide LP",
-  "Stake",
-];
-
-const CHAINS = [
-  "Ethereum",
-  "BNB Smart Chain",
-  "Arbitrum",
-  "Optimism",
-  "Solana",
-  "Monad",
-  "Berachain",
-];
+import { useState, useMemo, useEffect } from "react";
+import { useAppDispatch, useAppSelector } from "../../store";
+import {
+  selectTasksArray,
+  selectTierInfo,
+  selectPoints,
+  claimTask,
+  loadRewardsFromDb,
+  setWallet,
+  saveRewardsToDb,
+} from "../../store/rewardsSlice";
+import { useAppKitAccount } from "@reown/appkit/react";
 
 const TIERS = [
   {
@@ -41,29 +30,56 @@ const TIERS = [
 
 const CATEGORIES = ["Agent", "Chain", "Others"];
 
-const AgentBadges = [
-  "Shadow Badge",
-  "Dolomite Badge",
-  "BEX Badge",
-  "Beets Badge",
-  "Kodak Badge",
-  "Silo Badge",
-  "INT Badge",
-  "Infared Badge",
-];
-
-const ChainBadges = ["BSC Badge", "Sonic Badge", "Mantle Badge", "Base Badge"];
-const OtherBadges = ["Referall Badge", "Insights Badge"];
+// Removed old static badge arrays; now tasks drive UI.
 const Explore = () => {
-  const [activeTab, setActiveTab] = useState("All");
+  // Tab concept removed for now; could be reintroduced for filtering categories.
   const [selectedTier, setSelectedTier] = useState("All Tiers");
   const [showTierDropdown, setShowTierDropdown] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState("All Categories");
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
 
+  const dispatch = useAppDispatch();
+  const tasks = useAppSelector(selectTasksArray);
+  const { current: currentTier, next: nextTier } =
+    useAppSelector(selectTierInfo);
+  const points = useAppSelector(selectPoints);
+  const { address } = useAppKitAccount();
+
+  // Load persisted rewards when wallet connects
+  useEffect(() => {
+    if (address) {
+      dispatch(setWallet(address));
+      dispatch(loadRewardsFromDb(address));
+    }
+  }, [address, dispatch]);
+
+  const filteredTasks = useMemo(() => {
+    return tasks.filter((t) => {
+      if (
+        selectedCategory !== "All Categories" &&
+        t.category.toLowerCase() !==
+          selectedCategory.toLowerCase().replace("s", "")
+      )
+        return false;
+      if (selectedTier !== "All Tiers") {
+        // show tasks that could help reach selected tier (simplified)
+        if (selectedTier === "Bronze") return true;
+        if (selectedTier === "Silver") return true;
+        if (selectedTier === "Gold") return true;
+      }
+      return true;
+    });
+  }, [tasks, selectedCategory, selectedTier]);
+
+  const agentTasks = filteredTasks.filter(
+    (t) => t.category === "defi" || t.category === "chat"
+  );
+  const socialTasks = filteredTasks.filter((t) => t.category === "social");
+  const referralTasks = filteredTasks.filter((t) => t.category === "referral");
+
   return (
     <div className="flex  flex-col lg:flex-row flex-1 gap-8 px-4 overflow-y-scroll w-full">
-      <div className="lg:w-[60%]">
+      <div className="lg:w-[100%]">
         <div className="flex justify-between mb-4 mt-2 items-center">
           {/* Page Title */}
           <h1 className=" text-[24px] lg:text-[28px] font-bold text-white">
@@ -74,10 +90,33 @@ const Explore = () => {
           </p>
         </div>
         <p className="text-[#eee6e6] my-6">
-          Badge holders will share a reward pool of 4 billion Exyra Stones.
-          Stones signify your stake and rewards contribution to powering DeFi
-          with AI through EXYRA.
+          Earn Exyra Stones by completing tasks: social connections, chatting
+          with the agent, and on-chain DeFi actions. Stones determine your tier
+          & future reward share.
         </p>
+        <div className="flex flex-wrap gap-4 mb-6">
+          <div className="bg-[#262727] rounded-2xl p-4 flex flex-col min-w-[160px]">
+            <span className="text-xs text-[#B5B5B5]">Total Points</span>
+            <span className="text-2xl font-bold text-primary">{points}</span>
+          </div>
+          <div className="bg-[#262727] rounded-2xl p-4 flex flex-col min-w-[160px]">
+            <span className="text-xs text-[#B5B5B5]">Current Tier</span>
+            <span className="text-lg font-semibold text-white flex items-center gap-2">
+              <Image
+                src={currentTier.icon}
+                alt={currentTier.name}
+                width={20}
+                height={20}
+              />{" "}
+              {currentTier.name}
+            </span>
+            {nextTier && (
+              <span className="text-[10px] text-[#888] mt-1">
+                {nextTier.minPoints - points} pts to {nextTier.name}
+              </span>
+            )}
+          </div>
+        </div>
         {/* Filters */}
         <div className="flex items-center">
           <div className="relative  flex flex-col items-center w-full md:w-[180px]">
@@ -241,128 +280,64 @@ const Explore = () => {
             Clear Filters
           </button>
         </div>
-        <div>
-          <h5 className="font-semibold mt-4 text-[#F5F7F7]">
-            Agents: <span className="text-primary font-medium">0 </span>{" "}
-            <span className="text-[#99A0AE] font-medium">
-              /{AgentBadges.length}
-            </span>
-            <div className="flex flex-wrap gap-4">
-              {AgentBadges.map((badge, index) => {
-                return (
-                  <div
-                    key={badge}
-                    className="w-[152px] lg:w-[140px] flex items-center justify-center relative h-[143px] rounded-2xl bg-[#262727] mt-2"
-                  >
-                    <Image
-                      src={"/icons/lock.svg"}
-                      width={20}
-                      height={20}
-                      alt="lock"
-                      className="absolute top-2.5 right-[15px]"
-                    />
-                    <div className="relative w-[94.15px] h-[101.78px]">
-                      <Image
-                        fill
-                        src={
-                          index % 2 === 0
-                            ? "/images/panda.png"
-                            : "/images/ring.png"
-                        }
-                        alt={badge}
-                      />
-                    </div>
-                    <p className="absolute text-xs text-[#F5F7F7] mx-auto bottom-2">
-                      {badge}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
+        <section className="mt-4">
+          <h5 className="font-semibold text-[#F5F7F7] mb-2">Social Tasks</h5>
+          <div className="flex flex-wrap gap-4">
+            {socialTasks.map((task) => (
+              <TaskCard
+                key={task.id}
+                task={task}
+                onClaim={() => {
+                  dispatch(claimTask({ taskId: task.id }));
+                  dispatch(saveRewardsToDb());
+                }}
+              />
+            ))}
+            {socialTasks.length === 0 && (
+              <p className="text-xs text-[#888]">No tasks</p>
+            )}
+          </div>
+        </section>
+        <section className="mt-6">
+          <h5 className="font-semibold text-[#F5F7F7] mb-2">
+            Chat & DeFi Tasks
           </h5>
-        </div>
-        <div>
-          <h5 className="font-semibold mt-4 text-[#F5F7F7]">
-            Chains: <span className="text-primary font-medium">0 </span>{" "}
-            <span className="text-[#99A0AE] font-medium">
-              /{ChainBadges.length}
-            </span>
-            <div className="flex flex-wrap gap-4">
-              {ChainBadges.map((badge, index) => {
-                return (
-                  <div
-                    key={badge}
-                    className="w-[152px] lg:w-[140px] flex items-center justify-center relative h-[143px] rounded-2xl bg-[#262727] mt-2"
-                  >
-                    <Image
-                      src={"/icons/lock.svg"}
-                      width={20}
-                      height={20}
-                      alt="lock"
-                      className="absolute top-2.5 right-[15px]"
-                    />
-                    <div className="relative w-[94.15px] h-[101.78px]">
-                      <Image
-                        fill
-                        src={
-                          index % 2 === 0
-                            ? "/images/panda.png"
-                            : "/images/ring.png"
-                        }
-                        alt={badge}
-                      />
-                    </div>
-                    <p className="absolute text-xs text-[#F5F7F7] mx-auto bottom-2">
-                      {badge}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
-          </h5>
-        </div>
-        <div>
-          <h5 className="font-semibold mt-4 text-[#F5F7F7]">
-            Others: <span className="text-primary font-medium">0 </span>{" "}
-            <span className="text-[#99A0AE] font-medium">
-              /{OtherBadges.length}
-            </span>
-            <div className="flex flex-wrap gap-4">
-              {OtherBadges.map((badge, index) => {
-                return (
-                  <div
-                    key={badge}
-                    className="w-[152px] lg:w-[140px] flex items-center justify-center relative h-[143px] rounded-2xl bg-[#262727] mt-2"
-                  >
-                    <Image
-                      src={"/icons/lock.svg"}
-                      width={20}
-                      height={20}
-                      alt="lock"
-                      className="absolute top-2.5 right-[15px]"
-                    />
-                    <div className="relative w-[94.15px] h-[101.78px]">
-                      <Image
-                        fill
-                        src={
-                          index % 2 === 0
-                            ? "/images/panda.png"
-                            : "/images/ring.png"
-                        }
-                        alt={badge}
-                      />
-                    </div>
-                    <p className="absolute text-xs text-[#F5F7F7] mx-auto bottom-2">
-                      {badge}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
-          </h5>
-        </div>
+          <div className="flex flex-wrap gap-4">
+            {agentTasks.map((task) => (
+              <TaskCard
+                key={task.id}
+                task={task}
+                onClaim={() => {
+                  dispatch(claimTask({ taskId: task.id }));
+                  dispatch(saveRewardsToDb());
+                }}
+              />
+            ))}
+            {agentTasks.length === 0 && (
+              <p className="text-xs text-[#888]">No tasks</p>
+            )}
+          </div>
+        </section>
+        <section className="mt-6">
+          <h5 className="font-semibold text-[#F5F7F7] mb-2">Referral Tasks</h5>
+          <div className="flex flex-wrap gap-4">
+            {referralTasks.map((task) => (
+              <TaskCard
+                key={task.id}
+                task={task}
+                onClaim={() => {
+                  dispatch(claimTask({ taskId: task.id }));
+                  dispatch(saveRewardsToDb());
+                }}
+              />
+            ))}
+            {referralTasks.length === 0 && (
+              <p className="text-xs text-[#888]">No tasks</p>
+            )}
+          </div>
+        </section>
       </div>
-      <div className="flex-1 bg-[#303131] flex flex-col justify-center items-center rounded-[20px] h-[596px]">
+      {/* <div className="flex-1 bg-[#303131] flex flex-col justify-center items-center rounded-[20px] h-[596px]">
         <div className="w-[173px] h-[173px] relative">
           <Image src={"/images/illustration.svg"} fill alt="ill" />
         </div>
@@ -373,9 +348,70 @@ const Explore = () => {
           Learn how to earn each badge, unlock higher tiers and increase your
           reward
         </p>
-      </div>
+      </div> */}
     </div>
   );
 };
 
 export default Explore;
+
+import type { RewardTask } from "../../types/rewards";
+interface TaskCardProps {
+  task: RewardTask & {
+    progress?: number;
+    claimed?: boolean;
+    completed?: boolean;
+    target?: number;
+  };
+  onClaim: () => void;
+}
+const TaskCard = ({ task, onClaim }: TaskCardProps) => {
+  const completed = task.completed;
+  const claimable = completed && !task.claimed;
+  const progress = task.target
+    ? Math.min(task.progress || 0, task.target)
+    : undefined;
+  return (
+    <div className="w-[180px] relative h-[170px] rounded-2xl bg-[#262727] p-3 flex flex-col justify-between">
+      <div>
+        <h6 className="text-white text-sm font-semibold leading-snug line-clamp-2">
+          {task.title}
+        </h6>
+        <p className="text-[10px] mt-1 text-[#AAA] line-clamp-3">
+          {task.description}
+        </p>
+      </div>
+      {progress !== undefined && (
+        <div className="w-full h-1.5 bg-[#1f1f1f] rounded-full overflow-hidden mt-1">
+          <div
+            className="h-full bg-primary"
+            style={{
+              width: `${task.target ? (progress / task.target) * 100 : 0}%`,
+            }}
+          />
+        </div>
+      )}
+      <div className="flex items-center justify-between mt-2">
+        <span className="text-primary text-xs font-bold">+{task.points}</span>
+        {claimable ? (
+          <button
+            onClick={onClaim}
+            className="text-[10px] bg-primary/80 hover:bg-primary px-2 py-1 rounded-full text-white"
+          >
+            Claim
+          </button>
+        ) : task.claimed ? (
+          <span className="text-[10px] text-emerald-400">Claimed</span>
+        ) : (
+          <span className="text-[10px] text-[#666]">
+            {completed
+              ? "Pending"
+              : progress !== undefined
+              ? `${progress}/${task.target}`
+              : ""}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+};

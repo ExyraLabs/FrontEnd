@@ -213,3 +213,68 @@ For support and questions:
 ---
 
 Built with ❤️ by the Exyra team
+
+## 🏅 Rewards System (Beta)
+
+The rewards system awards "Exyra Stones" for completing on-platform actions. It is implemented with Redux Toolkit (`src/store/rewardsSlice.ts`).
+
+### Current Task Categories
+
+- Social: Follow X, Join Discord, Join Telegram
+- Chat: Send first message, Send 10 messages (progressive)
+- DeFi (placeholders): First swap, First stake (dispatch appropriate actions after execution logic is wired)
+- Referral: Invite friends (repeatable up to a configured cap)
+
+### State Shape
+
+```
+rewards: {
+  points: number,
+  chatMessageCount: number,
+  dailyMessageLimit: number,
+  tasks: Record<taskId, { progress, completions, claimed, ...taskMeta }>,
+  lastResetDate: 'YYYY-MM-DD'
+}
+```
+
+### Key Actions
+
+| Action | Purpose |
+|--------|---------|
+| `recordChatMessage()` | Increments daily message count & advances chat tasks |
+| `completeSocialTask({ platform })` | Marks a social task completed after verification |
+| `completeDefiAction({ actionType })` | Marks a DeFi task done (swap / stake etc) |
+| `claimTask({ taskId })` | Grants points for a completed task |
+| `checkDailyReset()` | Resets daily counters & chat tasks at UTC rollover |
+
+### Integrating Future On-Chain Events
+
+Call `dispatch(completeDefiAction({ actionType: 'swap' }))` (or `stake`, `bridge`, etc.) after a successful transaction confirmation. Then allow user to press "Claim" in the Rewards UI.
+
+### Extending
+
+Add new base tasks to the `baseTasks` array in `rewardsSlice.ts`. If progress-based, include `target` and initialize `progress: 0`.
+
+### Persistence (Implemented)
+
+Rewards progress now persists per wallet to MongoDB under `users.rewards`.
+
+Components:
+- Server actions: `getUserRewardsState`, `updateUserRewardsState` in `src/actions/rewards.ts`.
+- Thunks: `loadRewardsFromDb(wallet)` (hydrate on connect), `saveRewardsToDb()` (serialize minimal shape).
+- Middleware: Throttled (3s) autosave on reward-mutating actions; immediate save on claims.
+- Hook: `useRewardIntegrations(wallet)` to mark social & DeFi tasks complete.
+
+Stored shape:
+```
+rewards: {
+  points,
+  lastResetDate,
+  chatMessageCount,
+  tasks: { [taskId]: { progress, completions, claimed } }
+}
+```
+
+To award on connect automatically, optionally call existing `addPoints` server action after platform auth then dispatch `claimTask`.
+
+---

@@ -1,9 +1,12 @@
+"use client";
 // Removed unused imports - we'll pass the prompt via URL instead
 import { useAppKitAccount } from "@reown/appkit/react";
 import { motion } from "framer-motion";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useAppDispatch, useAppSelector } from "../store";
+import { recordChatMessage, selectChatMessageCount, selectDailyMessageLimit } from "../store/rewardsSlice";
 import { useChatRoomsMessages } from "../hooks/useChatRoomsMessages";
 import ConnectWalletModal from "./ConnectWalletModal";
 import { useCopilotMessagesContext } from "@copilotkit/react-core";
@@ -50,6 +53,9 @@ const ChatSection = () => {
   const [inputValue, setInputValue] = useState("");
 
   const { setMessages } = useCopilotMessagesContext();
+  const dispatch = useAppDispatch();
+  const count = useAppSelector(selectChatMessageCount);
+  const limit = useAppSelector(selectDailyMessageLimit);
 
   // Helper to generate a proper uuid (RFC4122 v4)
   function generateUUID() {
@@ -66,6 +72,7 @@ const ChatSection = () => {
   const handleSendMessage = () => {
     const prompt = inputValue.trim();
     if (!prompt) return;
+    if (count >= limit) return; // enforce daily limit
     let chatId = generateUUID();
     const chatRooms = loadChatRooms();
     // Ensure unique chatId
@@ -79,6 +86,7 @@ const ChatSection = () => {
     setInputValue("");
     // Switch route to /chat/[id] with prompt as URL parameter
     router.push(`/chat/${chatId}?prompt=${encodeURIComponent(prompt)}`);
+    dispatch(recordChatMessage());
   };
 
   useEffect(() => {
@@ -330,7 +338,7 @@ const ChatSection = () => {
                 {/* Message Counter and Tooltip */}
                 <div className="flex items-center gap-1 relative">
                   <span className="text-[#888888] text-[8px] lg:text-xs font-medium select-none">
-                    29 / 30 messages
+                    {count} / {limit} messages
                   </span>
                   <div className="relative  flex items-center group">
                     <button

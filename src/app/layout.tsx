@@ -2,6 +2,7 @@ import FloatingGainButton from "@/components/FloatingGainButton";
 import Header from "@/components/Header";
 import WalletProvider from "@/components/providers/WalletProvider";
 import Sidebar from "@/components/Sidebar";
+import ReduxProviders from "@/components/ReduxProviders";
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { headers } from "next/headers";
@@ -37,18 +38,20 @@ export default async function RootLayout({
   return (
     <html lang="en">
       <body style={inter.style} className={` antialiased`}>
-        <WalletProvider cookies={cookies}>
-          <div className="w-full gap-[20px] flex h-screen ">
-            <div className="hidden lg:flex  lg:w-[20%] flex-col">
-              <Sidebar />
+        <ReduxProviders>
+          <WalletProvider cookies={cookies}>
+            <div className="w-full gap-[20px] flex h-screen ">
+              <div className="hidden lg:flex  lg:w-[20%] flex-col">
+                <Sidebar />
+              </div>
+              <div className="flex overflow-y-clip  flex-col flex-1">
+                <Header />
+                {children}
+              </div>
+              <FloatingGainButton />
             </div>
-            <div className="flex overflow-y-clip  flex-col flex-1">
-              <Header />
-              {children}
-            </div>
-            <FloatingGainButton />
-          </div>
-        </WalletProvider>
+          </WalletProvider>
+        </ReduxProviders>
       </body>
     </html>
   );

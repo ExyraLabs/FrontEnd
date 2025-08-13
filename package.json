@@ -15,6 +15,7 @@
     "@curvefi/api": "2.63.0",
     "@lidofinance/lido-ethereum-sdk": "^4.5.0",
     "@modelcontextprotocol/sdk": "^1.17.1",
+    "@reduxjs/toolkit": "^2.8.2",
     "@reown/appkit": "^1.7.17",
     "@reown/appkit-adapter-wagmi": "^1.7.17",
     "@tanstack/react-query": "^5.83.0",
@@ -32,6 +33,7 @@
     "next": "15.4.3",
     "react": "19.1.0",
     "react-dom": "19.1.0",
+    "react-redux": "^9.2.0",
     "viem": "^2.33.1",
     "wagmi": "^2.16.0"
   },
