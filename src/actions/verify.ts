@@ -1,6 +1,135 @@
-// "use server";
-// import { ILeaderboard, IUser } from "@/types";
-// import clientPromise from "@/lib/mongo";
+"use server";
+import clientPromise from "../lib/mongodb";
+
+// Minimal subset of verify actions re-enabled for rewards social connect flow (gmail omitted)
+
+interface BasicUserRecord {
+  wallet?: string;
+  x_id?: number;
+  x_username?: string;
+  discord_id?: number;
+  discord_username?: string;
+  tg_id?: number;
+  tg_username?: string;
+  // allow extra properties without using 'any'
+  [k: string]: unknown;
+}
+
+export const getUserDetails = async (
+  wallet: string
+): Promise<BasicUserRecord | undefined> => {
+  if (!wallet || wallet.length < 2) return;
+  const client = await clientPromise;
+  const db = client.db("Exyra");
+  const user = await db.collection("users").findOne(
+    { wallet },
+    {
+      projection: {
+        _id: 0,
+        created_at: 0,
+        updated_at: 0,
+        pointsHistory: { _id: 0 },
+      },
+    }
+  );
+  if (user) return user as unknown as BasicUserRecord;
+  return {} as BasicUserRecord;
+};
+
+export const authenticateTwitter = async (
+  address: string,
+  id: number,
+  username: string
+): Promise<{ ok: boolean; message: string }> => {
+  const client = await clientPromise;
+  const db = client.db("Exyra");
+  const user = await getUserDetails(address);
+  if (!user) return { ok: false, message: "Wallet not registered" };
+  if (user?.x_id) return { ok: true, message: "Connected" };
+  const existing = await db.collection("users").findOne({
+    $or: [{ x_id: id }, { x_username: username }],
+    wallet: { $ne: address },
+  });
+  if (existing)
+    return {
+      ok: false,
+      message: "This Twitter account is already linked to another wallet",
+    };
+  const result = await db
+    .collection("users")
+    .updateOne(
+      { wallet: address },
+      { $set: { x_id: id, x_username: username } },
+      { upsert: true }
+    );
+  if (result.modifiedCount === 0 && !result.upsertedCount)
+    return { ok: false, message: "Failed to connect Twitter" };
+  return { ok: true, message: "Twitter connected successfully" };
+};
+
+export const authenticateDiscord = async (
+  address: string,
+  id: number,
+  username: string
+): Promise<{ ok: boolean; message: string }> => {
+  const client = await clientPromise;
+  const db = client.db("Exyra");
+  const user = await getUserDetails(address);
+  if (!user) return { ok: false, message: "Wallet not registered" };
+  if (user?.discord_id) return { ok: true, message: "Connected" };
+  const existing = await db.collection("users").findOne({
+    $or: [{ discord_id: id }, { discord_username: username }],
+    wallet: { $ne: address },
+  });
+  if (existing)
+    return {
+      ok: false,
+      message: "This Discord account is already linked to another wallet",
+    };
+  const result = await db
+    .collection("users")
+    .updateOne(
+      { wallet: address },
+      { $set: { discord_id: id, discord_username: username } },
+      { upsert: true }
+    );
+  if (result.modifiedCount === 0 && !result.upsertedCount)
+    return { ok: false, message: "Failed to connect Discord" };
+  return { ok: true, message: "Discord connected successfully" };
+};
+
+export const authenticateTelegram = async (
+  address: string,
+  id: number,
+  username: string
+): Promise<{ ok: boolean; message: string }> => {
+  const client = await clientPromise;
+  const db = client.db("Exyra");
+  const user = await getUserDetails(address);
+  if (!user) return { ok: false, message: "Wallet not registered" };
+  if (user?.tg_id) return { ok: true, message: "Connected" };
+  const existing = await db.collection("users").findOne({
+    $or: [{ tg_id: id }, { tg_username: username }],
+    wallet: { $ne: address },
+  });
+  if (existing)
+    return {
+      ok: false,
+      message: "This Telegram account is already linked to another wallet",
+    };
+  const result = await db
+    .collection("users")
+    .updateOne(
+      { wallet: address },
+      { $set: { tg_id: id, tg_username: username } },
+      { upsert: true }
+    );
+  if (result.modifiedCount === 0 && !result.upsertedCount)
+    return { ok: false, message: "Failed to connect Telegram" };
+  return { ok: true, message: "Telegram connected successfully" };
+};
+
+// Additional helpers intentionally omitted for brevity
 
 // export const hasMessagedToday = async (userId: string): Promise<boolean> => {
 //   const res = await fetch(`/verify/check-telegram-message?userId=${userId}`);
@@ -19,7 +148,7 @@
 //   iSKYOPS: boolean = false
 // ): Promise<{ error: boolean; message: string }> => {
 //   const client = await clientPromise;
-//   const db = client.db("AIOps");
+//   const db = client.db("Exyra");
 
 //   try {
 //     const user = await getUserDetails(address);
@@ -78,7 +207,7 @@
 // ): Promise<{ error: boolean; message: string }> => {
 //   try {
 //     const client = await clientPromise;
-//     const db = client.db("AIOps");
+//     const db = client.db("Exyra");
 //     const user = await getUserDetails(address);
 //     if (!user) {
 //       return { error: true, message: "Wallet not registered" };
@@ -123,7 +252,7 @@
 //     return;
 //   }
 //   const client = await clientPromise;
-//   const db = client.db("AIOps");
+//   const db = client.db("Exyra");
 //   const user = await db.collection("users").findOne(
 //     { wallet },
 //     {
@@ -146,7 +275,7 @@
 
 // export const getAllUsers = async (): Promise<ILeaderboard[]> => {
 //   const client = await clientPromise;
-//   const db = client.db("AIOps");
+//   const db = client.db("Exyra");
 //   const users = (await db
 //     .collection("users")
 //     .find(
@@ -183,7 +312,7 @@
 //   username: string
 // ): Promise<{ ok: boolean; message: string }> => {
 //   const client = await clientPromise;
-//   const db = client.db("AIOps");
+//   const db = client.db("Exyra");
 //   const user = await getUserDetails(address);
 //   if (!user) {
 //     return { ok: false, message: "Wallet not registered" };
@@ -226,7 +355,7 @@
 //   username: string
 // ): Promise<{ ok: boolean; message: string }> => {
 //   const client = await clientPromise;
-//   const db = client.db("AIOps");
+//   const db = client.db("Exyra");
 //   const user = await getUserDetails(address);
 //   if (!user) {
 //     return { ok: false, message: "Wallet not registered" };
@@ -268,7 +397,7 @@
 //   email: string
 // ): Promise<{ ok: boolean; message: string }> => {
 //   const client = await clientPromise;
-//   const db = client.db("AIOps");
+//   const db = client.db("Exyra");
 //   const user = await getUserDetails(address);
 //   if (!user) {
 //     return { ok: false, message: "Wallet not registered" };
@@ -308,7 +437,7 @@
 //   username: string
 // ): Promise<{ ok: boolean; message: string }> => {
 //   const client = await clientPromise;
-//   const db = client.db("AIOps");
+//   const db = client.db("Exyra");
 //   const user = await getUserDetails(address);
 //   if (!user) {
 //     return { ok: false, message: "Wallet not registered" };
@@ -347,7 +476,7 @@
 
 // export const getUserByCode = async (code: string): Promise<string> => {
 //   const client = await clientPromise;
-//   const db = client.db("AIOps");
+//   const db = client.db("Exyra");
 //   const user = await db
 //     .collection("users")
 //     .findOne({ code }, { projection: { wallet: 1, _id: 0 } });
@@ -365,7 +494,7 @@
 //   post: { link: string; type: string }
 // ): Promise<{ error: boolean; message: string }> => {
 //   const client = await clientPromise;
-//   const db = client.db("AIOps");
+//   const db = client.db("Exyra");
 
 //   try {
 //     // Sanitize input to prevent NoSQL injection

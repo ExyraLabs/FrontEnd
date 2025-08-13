@@ -5,6 +5,8 @@ import { CopilotKit } from "@copilotkit/react-core";
 import { arbitrum, mainnet } from "@reown/appkit/networks";
 import { createAppKit } from "@reown/appkit/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Session } from "next-auth";
+import { SessionProvider } from "next-auth/react";
 import { type ReactNode } from "react";
 import { cookieToInitialState, WagmiProvider, type Config } from "wagmi";
 
@@ -19,7 +21,7 @@ if (!projectId) {
 const runtimeUrl = process.env.NEXT_PUBLIC_COPILOTKIT_RUNTIME_URL;
 // const runtimeUrl = "http://localhost:3001/api/copilotkit";
 // When using Copilot Cloud, all we need is the publicApiKey.
-const publicApiKey = process.env.NEXT_PUBLIC_COPILOT_API_KEY;
+// const publicApiKey = process.env.NEXT_PUBLIC_COPILOT_API_KEY; // reserved for future Copilot Cloud usage
 
 // Set up metadata
 const metadata = {
@@ -47,9 +49,11 @@ export const modal = createAppKit({
 function WalletProvider({
   children,
   cookies,
+  session,
 }: {
   children: ReactNode;
   cookies: string | null;
+  session?: Session | null;
 }) {
   const initialState = cookieToInitialState(
     wagmiAdapter.wagmiConfig as Config,
@@ -57,14 +61,16 @@ function WalletProvider({
   );
 
   return (
-    <WagmiProvider
-      config={wagmiAdapter.wagmiConfig as Config}
-      initialState={initialState}
-    >
-      <QueryClientProvider client={queryClient}>
-        <CopilotKit runtimeUrl={runtimeUrl}>{children}</CopilotKit>
-      </QueryClientProvider>
-    </WagmiProvider>
+    <SessionProvider session={session ?? undefined}>
+      <WagmiProvider
+        config={wagmiAdapter.wagmiConfig as Config}
+        initialState={initialState}
+      >
+        <QueryClientProvider client={queryClient}>
+          <CopilotKit runtimeUrl={runtimeUrl}>{children}</CopilotKit>
+        </QueryClientProvider>
+      </WagmiProvider>
+    </SessionProvider>
   );
 }
 

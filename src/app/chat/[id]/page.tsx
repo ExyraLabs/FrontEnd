@@ -74,6 +74,8 @@ const Page = () => {
   // );
 
   const { setMessages } = useCopilotMessagesContext();
+  // Track whether we've hydrated the Copilot context for the current chat id
+  const [isHydratedForId, setIsHydratedForId] = useState(false);
 
   // const handleSendMessage = () => {
   //   console.log(id, "Chat-Id");
@@ -486,30 +488,29 @@ const Page = () => {
   // );
   // console.log(ContextMessages, "Context Messages");
 
+  // Ensure message context is scoped per chat room id to avoid cross-room overwrites
   useEffect(() => {
-    // Only sync existing messages on initial load for existing conversations
-    if (messages.length > 0 && visibleMessages.length === 0 && !promptFromUrl) {
-      // Filter out any potentially corrupted tool calls
+    // On id change, clear current visible messages to avoid saving them under the new id
+    setIsHydratedForId(false);
+    setMessages([]);
+
+    // If we have stored messages for this chat id and no prompt in URL, hydrate them
+    if (messages.length > 0 && !promptFromUrl) {
       const cleanMessages = messages.filter((msg) => {
         const messageType = (msg as BaseMessage)?.type || msg.constructor.name;
-        // Only keep TextMessages to avoid tool call corruption
         return messageType === "TextMessage";
       });
-
       console.log(
-        `Loading clean messages: ${messages.length} -> ${cleanMessages.length}`
+        `Hydrating chat ${id} messages: ${messages.length} -> ${cleanMessages.length}`
       );
-
       if (cleanMessages.length > 0) {
         setMessages(cleanMessages);
-
-        // Remove the automatic resend logic - this was causing duplication
-        // Messages should only be sent explicitly by user action or URL prompt
       }
+      setIsHydratedForId(true);
     }
-
-    //eslint-disable-next-line
-  }, [id, visibleMessages.length]);
+    // If promptFromUrl exists, another effect will handle sending; we'll set hydrated there
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
   useEffect(() => {
     // Load saved prompts state on mount
@@ -521,9 +522,9 @@ const Page = () => {
   }, [loadSavedPrompts]);
 
   useEffect(() => {
-    // Only save if we have messages and not currently loading
+    // Only save if we have messages for the current chat id and after hydration
     // Add a debounce to prevent too frequent saves
-    if (!isLoading && visibleMessages.length > 0) {
+    if (isHydratedForId && !isLoading && visibleMessages.length > 0) {
       const saveTimeout = setTimeout(() => {
         // Only save TextMessages to prevent any tool call corruption
         const cleanMessagesToSave = visibleMessages.filter((msg) => {
@@ -534,7 +535,7 @@ const Page = () => {
         });
 
         console.log(
-          `Saving only text messages: ${visibleMessages.length} -> ${cleanMessagesToSave.length}`
+          `Saving chat ${id} only text messages: ${visibleMessages.length} -> ${cleanMessagesToSave.length}`
         );
         saveChatRoomMessages(id, cleanMessagesToSave);
       }, 500); // Debounce saves by 500ms
@@ -542,16 +543,25 @@ const Page = () => {
       return () => clearTimeout(saveTimeout);
     }
     //eslint-disable-next-line
-  }, [isLoading, visibleMessages.length, id]);
+  }, [isHydratedForId, isLoading, visibleMessages.length, id]);
 
   useEffect(() => {
     // Handle initial prompt from URL (for new chats)
     if (promptFromUrl) {
-      console.log(`Sending initial prompt from URL: ${promptFromUrl}`);
+      console.log(
+        `Sending initial prompt from URL for chat ${id}: ${promptFromUrl}`
+      );
+      // Ensure we start fresh for this id
+      setMessages([]);
       sendMessage(promptFromUrl);
+      setIsHydratedForId(true);
       // Clean up URL parameter after sending the message
       router.replace(`/chat/${id}`, { scroll: false });
       return;
+    }
+    // If there's no prompt and we didn't hydrate from storage (no messages), mark as hydrated to allow saving new user messages
+    if (visibleMessages.length === 0 && !isHydratedForId) {
+      setIsHydratedForId(true);
     }
     //eslint-disable-next-line
   }, [promptFromUrl, id]);

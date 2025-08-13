@@ -1,6 +1,6 @@
 "use client";
 import Image from "next/image";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useAppDispatch, useAppSelector } from "../../store";
 import {
   selectTasksArray,
@@ -11,7 +11,17 @@ import {
   setWallet,
   saveRewardsToDb,
 } from "../../store/rewardsSlice";
+import { useRewardIntegrations } from "../../hooks/useRewardIntegrations";
+import { signIn, signOut, useSession } from "next-auth/react";
+import { useSearchParams } from "next/navigation";
+import telegramAuth from "@use-telegram-auth/client";
+import {
+  authenticateTwitter,
+  authenticateDiscord,
+  authenticateTelegram,
+} from "../../actions/verify";
 import { useAppKitAccount } from "@reown/appkit/react";
+import toast from "react-hot-toast";
 
 const TIERS = [
   {
@@ -44,6 +54,9 @@ const Explore = () => {
     useAppSelector(selectTierInfo);
   const points = useAppSelector(selectPoints);
   const { address } = useAppKitAccount();
+  const { handleSocialConnected } = useRewardIntegrations(address);
+  const { data: session, status } = useSession();
+  const params = useSearchParams();
 
   // Load persisted rewards when wallet connects
   useEffect(() => {
@@ -52,6 +65,92 @@ const Explore = () => {
       dispatch(loadRewardsFromDb(address));
     }
   }, [address, dispatch]);
+
+  // Handle return from OAuth (Twitter/Discord) similar to legacy tasks page
+  const authHandledRef = useRef(false);
+  useEffect(() => {
+    const from = params.get("from");
+    const processAuth = async () => {
+      if (!address || !session || status !== "authenticated") return;
+      if (authHandledRef.current) return; // guard against double invoke (StrictMode or re-renders)
+      authHandledRef.current = true;
+      try {
+        let res: { ok: boolean; message: string } | undefined;
+        const userSession = session.user as unknown as {
+          x_id?: number;
+          x_username?: string;
+          discord_id?: number;
+          discord_username?: string;
+        };
+        if (userSession?.x_id) {
+          res = await authenticateTwitter(
+            address,
+            userSession.x_id,
+            userSession.x_username || ""
+          );
+        } else if (userSession?.discord_id) {
+          res = await authenticateDiscord(
+            address,
+            userSession.discord_id,
+            userSession.discord_username || ""
+          );
+        }
+        if (res) {
+          if (res.ok) {
+            // Only show toast if it actually newly connected, not if already linked ('Connected')
+            if (res.message !== "Connected") {
+              toast.success(res.message || "Connected");
+            }
+            handleSocialConnected(
+              userSession?.x_id ? "x" : "discord",
+              "connect"
+            );
+          } else {
+            toast.error(res.message || "Connection failed");
+          }
+        }
+      } catch {
+        toast.error("Authentication failed");
+      } finally {
+        // always sign out to clear provider session cache so user can connect next provider
+        await signOut({ redirect: false });
+      }
+    };
+    if (from === "external" && status === "authenticated") {
+      processAuth();
+    }
+    return () => undefined;
+  }, [session, status, address, params, handleSocialConnected]);
+
+  // Connect helpers
+  const startTwitterConnect = () => {
+    toast.loading("Connecting X...", { id: "connect-x" });
+    signIn("twitter", { callbackUrl: "/rewards?from=external" });
+  };
+  const startDiscordConnect = () => {
+    toast.loading("Connecting Discord...", { id: "connect-discord" });
+    signIn("discord", {
+      callbackUrl: "/rewards?from=external",
+      redirect: true,
+    });
+  };
+  const startTelegramConnect = async () => {
+    if (!address) return;
+    try {
+      const res = await telegramAuth("7902207050", {
+        windowFeatures: { popup: true },
+      });
+      const auth = await authenticateTelegram(address, res.id, res.username);
+      if (auth.ok) {
+        handleSocialConnected("telegram", "connect");
+        toast.success(auth.message || "Telegram connected");
+      } else {
+        toast.error(auth.message || "Telegram connect failed");
+      }
+    } catch {
+      toast.error("Telegram authentication failed");
+    }
+  };
 
   const filteredTasks = useMemo(() => {
     return tasks.filter((t) => {
@@ -290,6 +389,28 @@ const Explore = () => {
                 onClaim={() => {
                   dispatch(claimTask({ taskId: task.id }));
                   dispatch(saveRewardsToDb());
+                  toast.success("Reward claimed");
+                }}
+                onActivate={() => {
+                  const phase = task.socialPhase;
+                  if (!phase || !task.socialPlatform) return;
+                  if (phase === "engage") {
+                    if (task.socialPlatform === "x") {
+                      window.open("https://x.com/ExyraLabs", "_blank");
+                    } else if (task.socialPlatform === "discord") {
+                      window.open("https://discord.gg/", "_blank");
+                    } else if (task.socialPlatform === "telegram") {
+                      window.open("https://t.me/", "_blank");
+                    }
+                    handleSocialConnected(task.socialPlatform, "engage");
+                    toast.success("Engagement recorded");
+                  } else if (phase === "connect") {
+                    if (task.socialPlatform === "x") startTwitterConnect();
+                    else if (task.socialPlatform === "discord")
+                      startDiscordConnect();
+                    else if (task.socialPlatform === "telegram")
+                      startTelegramConnect();
+                  }
                 }}
               />
             ))}
@@ -364,15 +485,21 @@ interface TaskCardProps {
     target?: number;
   };
   onClaim: () => void;
+  onActivate?: () => void; // click to perform action (social connect/engage)
 }
-const TaskCard = ({ task, onClaim }: TaskCardProps) => {
+const TaskCard = ({ task, onClaim, onActivate }: TaskCardProps) => {
   const completed = task.completed;
   const claimable = completed && !task.claimed;
   const progress = task.target
     ? Math.min(task.progress || 0, task.target)
     : undefined;
   return (
-    <div className="w-[180px] relative h-[170px] rounded-2xl bg-[#262727] p-3 flex flex-col justify-between">
+    <div
+      className="w-[180px] relative h-[170px] rounded-2xl bg-[#262727] p-3 flex flex-col justify-between hover:bg-[#303131] transition-colors cursor-pointer"
+      onClick={() => {
+        if (!claimable && onActivate) onActivate();
+      }}
+    >
       <div>
         <h6 className="text-white text-sm font-semibold leading-snug line-clamp-2">
           {task.title}

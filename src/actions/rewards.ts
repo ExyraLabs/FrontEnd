@@ -10,7 +10,7 @@ export const updateUserRewardsState = async (
   if (!wallet) return { ok: false, message: "Missing wallet" };
   try {
     const client = await clientPromise;
-    const db = client.db("AIOps");
+    const db = client.db("Exyra");
     const result = await db.collection("users").updateOne(
       { wallet },
       {
@@ -36,7 +36,7 @@ export const getUserRewardsState = async (
   if (!wallet) return null;
   try {
     const client = await clientPromise;
-    const db = client.db("AIOps");
+    const db = client.db("Exyra");
     const user: { rewards?: RewardsStatePersisted } | null = (await db
       .collection("users")
       .findOne({ wallet }, { projection: { _id: 0, rewards: 1 } })) as {

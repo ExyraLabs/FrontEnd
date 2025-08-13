@@ -17,37 +17,82 @@ const tiers: TierDefinition[] = [
   { id: "gold", name: "Gold", minPoints: 1500, icon: "/icons/gold.svg" },
 ];
 
-// Initial task catalogue (could be fetched from backend later)
+// Randomized point helper (stable per id in session)
+const randomPointCache: Record<string, number> = {};
+const randPoints = (id: string, min: number, max: number) => {
+  if (randomPointCache[id] != null) return randomPointCache[id];
+  const v = Math.floor(Math.random() * (max - min + 1)) + min;
+  randomPointCache[id] = v;
+  return v;
+};
+
+// Two‑phase social tasks: connect (authorize/link) then engage (follow/join). Gmail omitted.
+// We keep chat & defi tasks; referral retained.
 const baseTasks: RewardTask[] = [
-  // Social
+  // X (Twitter)
   {
-    id: "social-x-follow",
-    title: "Follow us on X",
-    description: "Connect your wallet & follow the official X account.",
+    id: "social-x-connect",
+    title: "Connect X Account",
+    description: "Authorize and link your X (Twitter) account.",
     category: "social",
-    points: 100,
+    points: randPoints("social-x-connect", 12, 20),
     socialPlatform: "x",
+    socialPhase: "connect",
+    actionType: "connect",
+  },
+  {
+    id: "social-x-engage",
+    title: "Follow on X",
+    description: "Follow the official X account.",
+    category: "social",
+    points: randPoints("social-x-engage", 22, 36),
+    socialPlatform: "x",
+    socialPhase: "engage",
     actionType: "follow",
   },
+  // Discord
   {
-    id: "social-discord-join",
-    title: "Join Discord",
+    id: "social-discord-connect",
+    title: "Connect Discord",
+    description: "Link your Discord account.",
+    category: "social",
+    points: randPoints("social-discord-connect", 12, 20),
+    socialPlatform: "discord",
+    socialPhase: "connect",
+    actionType: "connect",
+  },
+  {
+    id: "social-discord-engage",
+    title: "Join Discord Server",
     description: "Join the community Discord server.",
     category: "social",
-    points: 120,
+    points: randPoints("social-discord-engage", 22, 36),
     socialPlatform: "discord",
+    socialPhase: "engage",
     actionType: "join",
+  },
+  // Telegram
+  {
+    id: "social-telegram-connect",
+    title: "Connect Telegram",
+    description: "Link your Telegram account.",
+    category: "social",
+    points: randPoints("social-telegram-connect", 12, 20),
+    socialPlatform: "telegram",
+    socialPhase: "connect",
+    actionType: "connect",
   },
   {
-    id: "social-telegram-join",
-    title: "Join Telegram",
-    description: "Join the announcements Telegram channel.",
+    id: "social-telegram-engage",
+    title: "Join Telegram Group",
+    description: "Join the official Telegram group.",
     category: "social",
-    points: 80,
+    points: randPoints("social-telegram-engage", 22, 36),
     socialPlatform: "telegram",
+    socialPhase: "engage",
     actionType: "join",
   },
-  // Chat
+  // Chat progression
   {
     id: "chat-first-message",
     title: "Send your first message",
@@ -70,7 +115,7 @@ const baseTasks: RewardTask[] = [
     target: 10,
     actionType: "send-message",
   },
-  // DeFi placeholder tasks (completed when we dispatch appropriate action externally)
+  // DeFi placeholder tasks
   {
     id: "defi-first-swap",
     title: "Execute first swap",
@@ -102,7 +147,6 @@ const baseTasks: RewardTask[] = [
     maxCompletions: 5,
     progress: 0,
     target: 1,
-    // referral not mapped to a defi/social actionType yet
   },
 ];
 
@@ -192,12 +236,35 @@ export const rewardsSlice = createSlice({
       });
     },
     completeSocialTask(state, action: PayloadAction<SocialActionPayload>) {
-      const task = Object.values(state.tasks).find(
-        (t) => t.socialPlatform === action.payload.platform
+      // Backwards compatible: first complete connect phase, then engage.
+      const connectTask = Object.values(state.tasks).find(
+        (t) =>
+          t.socialPlatform === action.payload.platform &&
+          t.socialPhase === "connect"
       );
-      if (task && !task.completed) {
-        task.completed = true;
+      const engageTask = Object.values(state.tasks).find(
+        (t) =>
+          t.socialPlatform === action.payload.platform &&
+          t.socialPhase === "engage"
+      );
+      if (connectTask && !connectTask.completed) {
+        connectTask.completed = true;
+        return;
       }
+      if (engageTask && !engageTask.completed) {
+        engageTask.completed = true;
+      }
+    },
+    completeSocialPhase(
+      state,
+      action: PayloadAction<{ platform: string; phase: "connect" | "engage" }>
+    ) {
+      const task = Object.values(state.tasks).find(
+        (t) =>
+          t.socialPlatform === action.payload.platform &&
+          t.socialPhase === action.payload.phase
+      );
+      if (task && !task.completed) task.completed = true;
     },
     completeDefiAction(state, action: PayloadAction<DefiActionPayload>) {
       const task = Object.values(state.tasks).find(
@@ -254,6 +321,23 @@ export const rewardsSlice = createSlice({
               }
             }
           });
+          // Migration: map legacy single-phase social task ids to new engage tasks
+          const legacyMap: Record<string, string> = {
+            "social-x-follow": "social-x-engage",
+            "social-discord-join": "social-discord-engage",
+            "social-telegram-join": "social-telegram-engage",
+          };
+          Object.entries(persisted.tasks || {}).forEach(([legacyId, meta]) => {
+            const newId = legacyMap[legacyId];
+            if (newId && state.tasks[newId]) {
+              // If user had claimed/completed legacy, mirror on new engage task
+              if (meta.claimed || meta.completions > 0) {
+                state.tasks[newId].completed = true;
+                state.tasks[newId].claimed = meta.claimed;
+                state.tasks[newId].completions = meta.completions;
+              }
+            }
+          });
         }
       })
       .addCase(loadRewardsFromDb.rejected, (state, action) => {
@@ -278,6 +362,7 @@ export const {
   setWallet,
   recordChatMessage,
   completeSocialTask,
+  completeSocialPhase,
   completeDefiAction,
   claimTask,
   checkDailyReset,

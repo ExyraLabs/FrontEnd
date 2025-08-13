@@ -10,6 +10,7 @@ export interface RewardTask {
   progress?: number; // runtime progress (messages sent etc)
   target?: number; // target count for progress tasks
   socialPlatform?: "x" | "discord" | "telegram";
+  socialPhase?: "connect" | "engage"; // for two-step social tasks
   actionType?:
     | "connect"
     | "follow"

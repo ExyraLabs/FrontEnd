@@ -1,4 +1,5 @@
 import FloatingGainButton from "@/components/FloatingGainButton";
+import { Toaster } from "react-hot-toast";
 import Header from "@/components/Header";
 import WalletProvider from "@/components/providers/WalletProvider";
 import Sidebar from "@/components/Sidebar";
@@ -51,6 +52,20 @@ export default async function RootLayout({
               <FloatingGainButton />
             </div>
           </WalletProvider>
+          <Toaster
+            position="top-right"
+            toastOptions={{
+              style: {
+                background: "#262727",
+                color: "#fff",
+                fontSize: "14px",
+                borderRadius: "10px",
+                border: "1px solid #3A3B3B",
+              },
+              success: { iconTheme: { primary: "#10B981", secondary: "#fff" } },
+              error: { iconTheme: { primary: "#EF4444", secondary: "#fff" } },
+            }}
+          />
         </ReduxProviders>
       </body>
     </html>

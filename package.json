@@ -24,6 +24,7 @@
     "@uniswap/smart-order-router": "^4.22.14",
     "@uniswap/universal-router-sdk": "^4.19.7",
     "@uniswap/v3-sdk": "^3.25.2",
+    "@use-telegram-auth/client": "^1.0.5",
     "alchemy-sdk": "^3.6.2",
     "ethers": "5.7.2",
     "ethers-v5": "npm:ethers@5.7.2",
@@ -31,8 +32,10 @@
     "markdown-to-jsx": "^7.7.12",
     "mongodb": "^6.18.0",
     "next": "15.4.3",
+    "next-auth": "^4.24.11",
     "react": "19.1.0",
     "react-dom": "19.1.0",
+    "react-hot-toast": "^2.5.2",
     "react-redux": "^9.2.0",
     "viem": "^2.33.1",
     "wagmi": "^2.16.0"
