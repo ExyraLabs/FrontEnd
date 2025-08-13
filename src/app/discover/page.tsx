@@ -67,7 +67,7 @@ const AGENT_CARDS = [
     category: "Swap",
     features: [
       "Find best token swap rates across chains.",
-      "Swap tokens on Ethereum, BSC, Polygon, and more.",
+      "Swap tokens on Ethereum, BSC, Polygon and more.",
       "Earn rewards by providing liquidity.",
     ],
     prompts: [

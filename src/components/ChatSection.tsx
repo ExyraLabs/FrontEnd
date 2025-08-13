@@ -6,7 +6,11 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAppDispatch, useAppSelector } from "../store";
-import { recordChatMessage, selectChatMessageCount, selectDailyMessageLimit } from "../store/rewardsSlice";
+import {
+  recordChatMessage,
+  selectChatMessageCount,
+  selectDailyMessageLimit,
+} from "../store/rewardsSlice";
 import { useChatRoomsMessages } from "../hooks/useChatRoomsMessages";
 import ConnectWalletModal from "./ConnectWalletModal";
 import { useCopilotMessagesContext } from "@copilotkit/react-core";

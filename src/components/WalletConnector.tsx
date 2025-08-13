@@ -15,7 +15,7 @@ const WalletConnector = () => {
   // Use the custom hook to fetch real wallet assets
   const { assets, totalBalance, loading, error } = useWalletAssets();
 
-  console.log(assets, "assets");
+  // console.log(assets, "assets");
   // Close modals when clicking outside
   React.useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {

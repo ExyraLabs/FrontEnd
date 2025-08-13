@@ -1,7 +1,12 @@
 "use client";
 import { useCallback } from "react";
 import { useAppDispatch, useAppSelector } from "../store";
-import { completeSocialTask, completeDefiAction, setWallet, saveRewardsToDb } from "../store/rewardsSlice";
+import {
+  completeSocialTask,
+  completeDefiAction,
+  setWallet,
+  saveRewardsToDb,
+} from "../store/rewardsSlice";
 
 // Maps social platform identifiers to task socialPlatform values
 export type SocialPlatform = "x" | "discord" | "telegram";

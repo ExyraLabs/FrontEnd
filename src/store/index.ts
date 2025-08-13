@@ -40,7 +40,10 @@ const rewardsPersistenceMiddleware: Middleware = (storeApi) => {
   }, 3000);
   return (next) => (action) => {
     const result = next(action);
-  if (typeof (action as unknown as { type?: unknown }).type === "string" && rewardActionTypes.has((action as { type: string }).type)) {
+    if (
+      typeof (action as unknown as { type?: unknown }).type === "string" &&
+      rewardActionTypes.has((action as { type: string }).type)
+    ) {
       triggerSave();
     }
     return result;

@@ -1,6 +1,14 @@
-import { createSlice, PayloadAction, createSelector, createAsyncThunk } from "@reduxjs/toolkit";
+import {
+  createSlice,
+  PayloadAction,
+  createSelector,
+  createAsyncThunk,
+} from "@reduxjs/toolkit";
 import { RewardTask, TierDefinition } from "../types/rewards";
-import { getUserRewardsState, updateUserRewardsState } from "../actions/rewards";
+import {
+  getUserRewardsState,
+  updateUserRewardsState,
+} from "../actions/rewards";
 
 // Static tier definitions
 const tiers: TierDefinition[] = [
@@ -130,9 +138,9 @@ const buildInitialState = (): RewardsSliceState => {
     chatMessageCount: 0,
     dailyMessageLimit: 30,
     lastResetDate: todayISO(),
-  wallet: null,
-  saving: false,
-  lastSaveError: null,
+    wallet: null,
+    saving: false,
+    lastSaveError: null,
   };
 };
 
@@ -231,7 +239,8 @@ export const rewardsSlice = createSlice({
           const persisted = action.payload;
           state.points = persisted.points ?? state.points;
           state.lastResetDate = persisted.lastResetDate ?? state.lastResetDate;
-          state.chatMessageCount = persisted.chatMessageCount ?? state.chatMessageCount;
+          state.chatMessageCount =
+            persisted.chatMessageCount ?? state.chatMessageCount;
           Object.entries(persisted.tasks || {}).forEach(([taskId, meta]) => {
             if (state.tasks[taskId]) {
               state.tasks[taskId].progress = meta.progress;
@@ -239,7 +248,9 @@ export const rewardsSlice = createSlice({
               state.tasks[taskId].claimed = meta.claimed;
               // derive completed
               if (state.tasks[taskId].target) {
-                state.tasks[taskId].completed = state.tasks[taskId].progress >= (state.tasks[taskId].target || 0);
+                state.tasks[taskId].completed =
+                  state.tasks[taskId].progress >=
+                  (state.tasks[taskId].target || 0);
               }
             }
           });
