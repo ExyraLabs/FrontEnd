@@ -70,7 +70,7 @@ const runtime = new CopilotRuntime({
   },
   actions: [
     {
-      name: "getTokenPriceById",
+      name: "GetTokenPrice",
       description:
         "Get the current price of a cryptocurrency token using CoinGecko API by the coin_id. Returns price, 24h change, and market cap information.",
       parameters: [
@@ -133,7 +133,7 @@ const runtime = new CopilotRuntime({
       },
     },
     {
-      name: "fetchCoinId",
+      name: "GetToken",
       description:
         "Fetches coin ID from the coin gecko API for a given token  .",
       parameters: [

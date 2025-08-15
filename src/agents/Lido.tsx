@@ -11,6 +11,7 @@ import {
 } from "@lidofinance/lido-ethereum-sdk";
 // import { mainnet } from "viem/chains"; // kept commented; used in RPC config example
 import { useCopilotAction } from "@copilotkit/react-core";
+import { useRewardIntegrations } from "@/hooks/useRewardIntegrations";
 
 export interface EthereumProvider {
   request(...args: unknown[]): Promise<unknown>;
@@ -39,6 +40,7 @@ const sdk = new LidoSDK({
 
 const Lido = () => {
   const { address, isConnected } = useAppKitAccount();
+  const { handleDefiAction } = useRewardIntegrations(address);
 
   // Helper function to create transaction callback
   const createCallback =
@@ -287,6 +289,12 @@ Network: Ethereum Mainnet
             });
 
             if (stakeTx.result) {
+              // Mark DeFi stake task as completed
+              try {
+                await handleDefiAction("stake");
+              } catch (e) {
+                console.warn("Failed to mark stake task complete:", e);
+              }
               return `✅ Stake Transaction Successful!
 
 🔄 Transaction Details:
@@ -310,7 +318,8 @@ Network: Ethereum Mainnet
               account: address as `0x${string}`,
               referralAddress: referralAddr,
             });
-            return `🧪 Stake Simulation Results:
+              // No on-chain action; do not mark task
+              return `🧪 Stake Simulation Results:
 
 📊 Simulation successful for ${amount} ETH stake
 ✅ Transaction would execute successfully

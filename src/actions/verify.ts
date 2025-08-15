@@ -36,6 +36,65 @@ export const getUserDetails = async (
   return {} as BasicUserRecord;
 };
 
+// Minimal server action to return only social fields for a given wallet
+export const getUserSocial = async (
+  wallet: string
+): Promise<
+  | {
+      ok: true;
+      user: Pick<
+        BasicUserRecord,
+        | "discord_id"
+        | "discord_username"
+        | "x_id"
+        | "x_username"
+        | "tg_id"
+        | "tg_username"
+      >;
+    }
+  | { ok: false; error: string }
+> => {
+  try {
+    if (!wallet) return { ok: false, error: "Missing wallet" };
+    const client = await clientPromise;
+    const db = client.db("Exyra");
+    const user = (await db.collection("users").findOne(
+      { wallet },
+      {
+        projection: {
+          _id: 0,
+          discord_id: 1,
+          discord_username: 1,
+          x_id: 1,
+          x_username: 1,
+          tg_id: 1,
+          tg_username: 1,
+        },
+      }
+    )) as unknown as BasicUserRecord | null;
+    const shaped = {
+      discord_id: user?.discord_id,
+      discord_username: user?.discord_username,
+      x_id: user?.x_id,
+      x_username: user?.x_username,
+      tg_id: user?.tg_id,
+      tg_username: user?.tg_username,
+    } as Pick<
+      BasicUserRecord,
+      | "discord_id"
+      | "discord_username"
+      | "x_id"
+      | "x_username"
+      | "tg_id"
+      | "tg_username"
+    >;
+    return { ok: true, user: shaped };
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Unknown error";
+    return { ok: false, error: message };
+  }
+};
+
 export const authenticateTwitter = async (
   address: string,
   id: number,

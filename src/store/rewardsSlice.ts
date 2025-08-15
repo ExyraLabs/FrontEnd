@@ -43,7 +43,7 @@ const baseTasks: RewardTask[] = [
   {
     id: "social-x-engage",
     title: "Follow on X",
-    description: "Follow the official X account.",
+    description: "Follow the official X account. Updates 00:00 UTC",
     category: "social",
     points: randPoints("social-x-engage", 22, 36),
     socialPlatform: "x",

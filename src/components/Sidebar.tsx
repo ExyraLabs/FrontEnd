@@ -407,7 +407,9 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
         onMouseEnter={showInModal ? undefined : () => setHoveredChatId(chatId)}
         onMouseLeave={showInModal ? undefined : () => setHoveredChatId(null)}
       >
-        <span className={`truncate flex-1 ${isMobile ? "" : "mr-2"}`}>
+        <span
+          className={`truncate text-white flex-1 ${isMobile ? "" : "mr-2"}`}
+        >
           {highlightSearchQuery
             ? highlightText(displayText, highlightSearchQuery)
             : displayText}
@@ -905,7 +907,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
               height={15}
               className=""
             />
-            <p className="text-sm font-semibold">New Chat</p>
+            <p className="text-sm  text-white font-semibold">New Chat</p>
           </button>
           {typeof open === "boolean" && (
             <button
@@ -965,7 +967,9 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                   <div className="w-8 h-8 flex items-center justify-center">
                     {item.icon}
                   </div>
-                  <span className="text-sm font-medium">{item.name}</span>
+                  <span className="text-sm- text-white font-medium">
+                    {item.name}
+                  </span>
                 </Link>
                 // </button>
               ))}
@@ -1112,18 +1116,18 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
           {/* Bottom Links Section */}
           <div className=" bg-appDark absolute bottom-5 mr-6 rounded-[12px] p-4 ">
             <Link href={"https://exyra.ai"} className="flex py-2 items-center">
-              <p className="text-xs">About Exyra</p>
+              <p className="text-xs text-white">About Exyra</p>
               <Image src="/icons/arrow.svg" alt="arr" width={20} height={20} />
             </Link>
             <Link
               href={"https://docs.exyra.ai"}
               className="flex py-2 items-center"
             >
-              <p className="text-xs">Exyra Docs</p>
+              <p className="text-xs text-white">Exyra Docs</p>
               <Image src="/icons/arrow.svg" alt="arr" width={20} height={20} />
             </Link>
             <div className="flex py-2 gap-[29px] items-center">
-              <p className="text-xs">Connect</p>
+              <p className="text-xs text-white">Connect</p>
               <div className="flex gap-3   items-center">
                 {socialLinks.map((link, index) => (
                   <Link

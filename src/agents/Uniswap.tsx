@@ -13,12 +13,13 @@ import { ERC20_ABI, ROUTER_ABI_V2, ROUTER_ADDRESS_V2 } from "@/constants/swap";
 import { useCopilotAction } from "@copilotkit/react-core";
 import { useAppKitAccount } from "@reown/appkit/react";
 import { BigNumber, ethers } from "ethers";
-import { parseUnits } from "viem";
 import { useSendCalls } from "wagmi";
 import { getContractAddressWithDecimals } from "@/lib/coingecko";
+import { useRewardIntegrations } from "@/hooks/useRewardIntegrations";
 
 const Uniswap = () => {
   const { isConnected, address } = useAppKitAccount();
+  const { handleDefiAction } = useRewardIntegrations(address);
   const { sendCalls } = useSendCalls();
   const QUICKNODE_HTTP_ENDPOINT =
     "https://wiser-billowing-diagram.quiknode.pro/7b5999ec873d704e376e88b7464a49ff0924414c/";
@@ -119,10 +120,7 @@ const Uniswap = () => {
       const deadline = Math.floor(Date.now() / 1000) + 60 * 20; // 20 minutes from the current Unix time
       const value = trade.inputAmount.raw; // // needs to be converted to e.g. hex
       const valueHex = ethers.BigNumber.from(value.toString()).toHexString(); //convert to hex string
-      const maxApproval = parseUnits(
-        "115792089237316195423570985008687907853269984665640564039457584007913129639935",
-        0
-      ); // Max uint256
+  // Removed unused Max uint256 constant
 
       // Determine which swap function to use based on input/output tokens
       const isInputETH = tokenInData.symbol === "ETH";
@@ -223,6 +221,14 @@ const Uniswap = () => {
       console.log(
         "Swap transaction submitted - check your wallet for confirmation"
       );
+
+      // Mark DeFi swap task as completed in rewards once the transaction is submitted
+      try {
+        await handleDefiAction("swap");
+      } catch (e) {
+        // non-fatal for UI; logging only
+        console.warn("Failed to mark swap task complete:", e);
+      }
 
       return {
         success: true,

@@ -5,7 +5,18 @@ import {
   useWaitForTransactionReceipt,
   type UseWriteContractReturnType,
 } from "wagmi";
-import { parseUnits, formatUnits, type PublicClient } from "viem";
+import {
+  getAccount,
+  getWalletClient,
+  type Config as WagmiCoreConfig,
+} from "@wagmi/core";
+import { config as wagmiConfig } from "@/config";
+import {
+  parseUnits,
+  formatUnits,
+  type PublicClient,
+  type WalletClient,
+} from "viem";
 import { ethers } from "ethers";
 import { ERC20_ABI } from "../constants/swap";
 import { JSBI } from "@uniswap/sdk";
@@ -252,6 +263,48 @@ export async function getSigner(
 
   const lowerExpected = expectedAddress?.toLowerCase();
 
+  // First, try to use the wallet actually connected via Wagmi/AppKit
+  // This ensures we use the same connector (e.g., MetaMask, Phantom, WC) the app session is using
+  try {
+    const acct = getAccount(wagmiConfig as WagmiCoreConfig);
+    if (acct?.isConnected) {
+      if (!lowerExpected || acct.address?.toLowerCase() === lowerExpected) {
+        const wc: WalletClient | undefined = await getWalletClient(
+          wagmiConfig as WagmiCoreConfig,
+          { chainId: acct.chainId }
+        );
+        if (wc) {
+          type Eip1193Provider = {
+            request: (args: {
+              method: string;
+              params?: unknown[];
+            }) => Promise<unknown>;
+          };
+          // Wrap the Viem wallet client into a minimal EIP-1193 provider for ethers
+          const eip1193 = wc as unknown as {
+            request: Eip1193Provider["request"];
+          };
+          const web3Provider = new ethers.providers.Web3Provider(
+            eip1193 as unknown as ethers.providers.ExternalProvider
+          );
+          const signer = web3Provider.getSigner();
+          if (
+            !lowerExpected ||
+            (await signer.getAddress()).toLowerCase() === lowerExpected
+          ) {
+            return signer;
+          }
+        }
+      }
+    }
+  } catch (e) {
+    // Non-fatal: fall back to injected providers below
+    console.debug(
+      "Wagmi/AppKit signer path failed, falling back to injected providers",
+      e
+    );
+  }
+
   // Helper: attempt to get signer from a raw injected provider object
   const tryProvider = async (
     rawProvider: InjectedEthereumProvider | undefined,
@@ -287,7 +340,7 @@ export async function getSigner(
   // 1. Multiple providers pattern (EIP-1193 multiplexing)
   const multi = w.ethereum?.providers;
   if (multi && multi.length) {
-    // If expected address provided, try to find the provider already connected to it first
+    // If expected address provided, return signer from the provider that controls it
     if (lowerExpected) {
       for (const p of multi) {
         const signer = await tryProvider(p, false);
@@ -301,21 +354,7 @@ export async function getSigner(
       }
     }
 
-    // Prefer Phantom if present
-    const phantomProv = multi.find((p) => p.isPhantom || p.isPhantomEthereum);
-    if (phantomProv) {
-      const phantomSigner = await tryProvider(phantomProv, !lowerExpected);
-      if (phantomSigner) return phantomSigner;
-    }
-
-    // Fallback to MetaMask
-    const metamaskProv = multi.find((p) => p.isMetaMask);
-    if (metamaskProv) {
-      const mmSigner = await tryProvider(metamaskProv, !lowerExpected);
-      if (mmSigner) return mmSigner;
-    }
-
-    // Or the first available
+    // Otherwise, just return the first provider that can give a signer (no arbitrary preference)
     for (const p of multi) {
       const s = await tryProvider(p, !lowerExpected);
       if (s) return s;
@@ -325,7 +364,16 @@ export async function getSigner(
   // 2. Dedicated Phantom EVM provider (phantom injects window.phantom.ethereum)
   if (w.phantom?.ethereum) {
     const phantomSigner = await tryProvider(w.phantom.ethereum, !lowerExpected);
-    if (phantomSigner) return phantomSigner;
+    if (phantomSigner) {
+      if (!lowerExpected) return phantomSigner;
+      try {
+        if (
+          (await phantomSigner.getAddress()).toLowerCase() === lowerExpected
+        ) {
+          return phantomSigner;
+        }
+      } catch {}
+    }
   }
 
   // 3. Single provider on window.ethereum (could be MetaMask or something else)

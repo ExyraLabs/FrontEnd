@@ -1,6 +1,6 @@
 "use client";
 import Image from "next/image";
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useAppDispatch, useAppSelector } from "../../store";
 import {
   selectTasksArray,
@@ -19,6 +19,7 @@ import {
   authenticateTwitter,
   authenticateDiscord,
   authenticateTelegram,
+  getUserSocial,
 } from "../../actions/verify";
 import { useAppKitAccount } from "@reown/appkit/react";
 import toast from "react-hot-toast";
@@ -42,6 +43,12 @@ const CATEGORIES = ["Agent", "Chain", "Others"];
 
 // Removed old static badge arrays; now tasks drive UI.
 const Explore = () => {
+  // Public envs for client-side use
+  const DISCORD_INVITE_URL =
+    process.env.NEXT_PUBLIC_DISCORD_INVITE_URL || "https://discord.gg/";
+  const TELEGRAM_INVITE_URL =
+    process.env.NEXT_PUBLIC_TELEGRAM_INVITE_URL || "https://t.me/";
+  const TELEGRAM_GROUP_ID = process.env.NEXT_PUBLIC_TELEGRAM_GROUP_ID;
   // Tab concept removed for now; could be reintroduced for filtering categories.
   const [selectedTier, setSelectedTier] = useState("All Tiers");
   const [showTierDropdown, setShowTierDropdown] = useState(false);
@@ -134,10 +141,58 @@ const Explore = () => {
       redirect: true,
     });
   };
+  // Validate user membership in Discord guild using server API
+  const verifyDiscordMembership = useCallback(async (): Promise<boolean> => {
+    // Prefer session values if present (right after OAuth)
+    let discord_id: number | undefined;
+    let discord_username: string | undefined;
+
+    if (address) {
+      // Get stored profile by wallet via server action
+      try {
+        const payload = await getUserSocial(address);
+        if (payload?.ok && payload?.user) {
+          discord_id = payload.user.discord_id as unknown as number | undefined;
+          discord_username = payload.user.discord_username as
+            | string
+            | undefined;
+        }
+      } catch {}
+    }
+
+    if (!discord_id && !discord_username) {
+      toast.error("Connect Discord first");
+      return false;
+    }
+    try {
+      const res = await fetch("/api/discord/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: discord_id,
+          username: discord_username,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.ok) {
+        const msg = data?.error || `Validation failed (${res.status})`;
+        toast.error(msg);
+        return false;
+      }
+      return !!data.exists;
+    } catch {
+      toast.error("Could not validate Discord membership");
+      return false;
+    }
+  }, [address]);
   const startTelegramConnect = async () => {
     if (!address) return;
+    if (!TELEGRAM_GROUP_ID) {
+      toast.error("Missing Telegram bot id configuration");
+      return;
+    }
     try {
-      const res = await telegramAuth("7902207050", {
+      const res = await telegramAuth("8370799417", {
         windowFeatures: { popup: true },
       });
       const auth = await authenticateTelegram(address, res.id, res.username);
@@ -151,6 +206,45 @@ const Explore = () => {
       toast.error("Telegram authentication failed");
     }
   };
+
+  // Validate Telegram group membership via server API
+  const verifyTelegramMembership = useCallback(async (): Promise<boolean> => {
+    if (!address) {
+      toast.error("Connect wallet first");
+      return false;
+    }
+    // We rely on stored tg_id from server action getUserSocial
+    let tg_id: number | undefined;
+    try {
+      const payload = await getUserSocial(address);
+      if (payload?.ok && payload?.user) {
+        tg_id = payload.user.tg_id as unknown as number | undefined;
+      }
+    } catch {}
+
+    if (!tg_id) {
+      toast.error("Connect Telegram first");
+      return false;
+    }
+
+    try {
+      const res = await fetch("/api/telegram/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: tg_id }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.ok) {
+        const msg = data?.error || `Validation failed (${res.status})`;
+        toast.error(msg);
+        return false;
+      }
+      return !!data.exists;
+    } catch {
+      toast.error("Could not validate Telegram membership");
+      return false;
+    }
+  }, [address]);
 
   const filteredTasks = useMemo(() => {
     return tasks.filter((t) => {
@@ -174,10 +268,10 @@ const Explore = () => {
     (t) => t.category === "defi" || t.category === "chat"
   );
   const socialTasks = filteredTasks.filter((t) => t.category === "social");
-  const referralTasks = filteredTasks.filter((t) => t.category === "referral");
+  // const referralTasks = filteredTasks.filter((t) => t.category === "referral");
 
   return (
-    <div className="flex  flex-col lg:flex-row flex-1 gap-8 px-4 overflow-y-scroll w-full">
+    <div className="flex  flex-col lg:flex-row flex-1 gap-8 px-4 scrollbar-hide overflow-y-scroll w-full">
       <div className="lg:w-[100%]">
         <div className="flex justify-between mb-4 mt-2 items-center">
           {/* Page Title */}
@@ -217,7 +311,7 @@ const Explore = () => {
           </div>
         </div>
         {/* Filters */}
-        <div className="flex items-center">
+        {/* <div className="flex items-center">
           <div className="relative  flex flex-col items-center w-full md:w-[180px]">
             <button
               onClick={() => {
@@ -378,8 +472,8 @@ const Explore = () => {
           >
             Clear Filters
           </button>
-        </div>
-        <section className="mt-4">
+        </div> */}
+        <section className="mt-4 max-w-[70%]">
           <h5 className="font-semibold text-[#F5F7F7] mb-2">Social Tasks</h5>
           <div className="flex flex-wrap gap-4">
             {socialTasks.map((task) => (
@@ -397,13 +491,45 @@ const Explore = () => {
                   if (phase === "engage") {
                     if (task.socialPlatform === "x") {
                       window.open("https://x.com/ExyraLabs", "_blank");
+                      handleSocialConnected("x", "engage");
+                      toast.success("Engagement recorded");
                     } else if (task.socialPlatform === "discord") {
-                      window.open("https://discord.gg/", "_blank");
+                      toast.loading("Validating Discord membership...", {
+                        id: "discord-engage",
+                      });
+                      verifyDiscordMembership().then((exists) => {
+                        if (exists) {
+                          toast.success("Discord membership verified", {
+                            id: "discord-engage",
+                          });
+                          handleSocialConnected("discord", "engage");
+                        } else {
+                          toast.dismiss("discord-engage");
+                          window.open(DISCORD_INVITE_URL, "_blank");
+                          toast(
+                            "Join the Discord, then click again to verify."
+                          );
+                        }
+                      });
                     } else if (task.socialPlatform === "telegram") {
-                      window.open("https://t.me/", "_blank");
+                      toast.loading("Validating Telegram membership...", {
+                        id: "telegram-engage",
+                      });
+                      verifyTelegramMembership().then((exists) => {
+                        if (exists) {
+                          toast.success("Telegram membership verified", {
+                            id: "telegram-engage",
+                          });
+                          handleSocialConnected("telegram", "engage");
+                        } else {
+                          toast.dismiss("telegram-engage");
+                          window.open(TELEGRAM_INVITE_URL, "_blank");
+                          toast(
+                            "Join the Telegram, then click again to verify."
+                          );
+                        }
+                      });
                     }
-                    handleSocialConnected(task.socialPlatform, "engage");
-                    toast.success("Engagement recorded");
                   } else if (phase === "connect") {
                     if (task.socialPlatform === "x") startTwitterConnect();
                     else if (task.socialPlatform === "discord")
@@ -419,7 +545,7 @@ const Explore = () => {
             )}
           </div>
         </section>
-        <section className="mt-6">
+        <section className="mt-6 max-w-[70%] pb-6   ">
           <h5 className="font-semibold text-[#F5F7F7] mb-2">
             Chat & DeFi Tasks
           </h5>
@@ -439,7 +565,7 @@ const Explore = () => {
             )}
           </div>
         </section>
-        <section className="mt-6">
+        {/* <section className="mt-6">
           <h5 className="font-semibold text-[#F5F7F7] mb-2">Referral Tasks</h5>
           <div className="flex flex-wrap gap-4">
             {referralTasks.map((task) => (
@@ -456,7 +582,7 @@ const Explore = () => {
               <p className="text-xs text-[#888]">No tasks</p>
             )}
           </div>
-        </section>
+        </section> */}
       </div>
       {/* <div className="flex-1 bg-[#303131] flex flex-col justify-center items-center rounded-[20px] h-[596px]">
         <div className="w-[173px] h-[173px] relative">
@@ -520,22 +646,33 @@ const TaskCard = ({ task, onClaim, onActivate }: TaskCardProps) => {
       )}
       <div className="flex items-center justify-between mt-2">
         <span className="text-primary text-xs font-bold">+{task.points}</span>
-        {claimable ? (
+        {claimable && (
           <button
             onClick={onClaim}
-            className="text-[10px] bg-primary/80 hover:bg-primary px-2 py-1 rounded-full text-white"
+            className="text-[10px] cursor-pointer bg-primary/80 hover:bg-primary px-2 py-1 rounded-full text-white"
           >
             Claim
           </button>
-        ) : task.claimed ? (
-          <span className="text-[10px] text-emerald-400">Claimed</span>
-        ) : (
-          <span className="text-[10px] text-[#666]">
-            {completed
-              ? "Pending"
-              : progress !== undefined
-              ? `${progress}/${task.target}`
-              : ""}
+        )}
+        {task.claimed && (
+          <span
+            className="inline-flex items-center justify-center w-3 h-3 rounded-full bg-emerald-500/90 shadow-md"
+            title="Task completed"
+          >
+            <svg
+              className="w-2.5 h-2.5 text-white"
+              viewBox="0 0 16 16"
+              fill="none"
+              aria-hidden="true"
+            >
+              <path
+                d="M3.5 8.5l3 3 6-7"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
           </span>
         )}
       </div>

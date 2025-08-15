@@ -172,8 +172,8 @@ const Page = () => {
   const getToolIcon = (toolName: string): string | null => {
     const toolIconMapping: Record<string, string> = {
       // CoinGecko tools
-      getTokenPriceById: "/icons/gecko.png",
-      fetchCoinId: "/icons/gecko.png",
+      GetTokenPrice: "/icons/gecko.png",
+      GetToken: "/icons/gecko.png",
       getCoinDetails: "/icons/gecko.png",
       searchCoinsByName: "/icons/gecko.png",
       getContractAddress: "/icons/gecko.png",
@@ -198,7 +198,7 @@ const Page = () => {
 
       // KyberSwap/KNC tools
       getKyberSwapQuoteBySymbol: "/icons/kyber.png",
-      executeKyberSwapBySymbol: "/icons/kyber.png",
+      SwapTokens: "/icons/kyber.png",
       executeKyberSwap: "/icons/kyber.png",
       getTokenInfo: "/icons/kyber.png",
       getCommonTokens: "/icons/kyber.png",
@@ -340,7 +340,7 @@ const Page = () => {
               className="rounded-sm"
             />
           )}
-          <span>{toolCall.name}</span>
+          <span className="text-xs text-[#d9d9d9]">{toolCall.name}</span>
           {/* Completed actions do not render interactive UI */}
         </div>
       );

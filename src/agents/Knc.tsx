@@ -4,11 +4,9 @@ import { parseUnits, formatUnits } from "viem";
 import { ethers } from "ethers";
 import { useCopilotAction } from "@copilotkit/react-core";
 import axios from "axios";
-import {
-  getContractAddressWithDecimals,
-  getAvailablePlatforms,
-} from "@/lib/coingecko";
+import { getContractAddressWithDecimals } from "@/lib/coingecko";
 import SlippageSelector from "@/components/SlippageSelector";
+import { useRewardIntegrations } from "@/hooks/useRewardIntegrations";
 
 // KyberSwap Aggregator API configuration
 const KYBERSWAP_API_BASE = "https://aggregator-api.kyberswap.com";
@@ -44,7 +42,8 @@ interface SwapResult {
 }
 
 const Knc = () => {
-  const { address, isConnected } = useAppKitAccount();
+  const { address } = useAppKitAccount();
+  const { handleDefiAction } = useRewardIntegrations(address);
 
   // Helper function to resolve token addresses and handle native tokens
   const resolveTokenAddresses = async (
@@ -426,10 +425,13 @@ const Knc = () => {
         executeSwapTx = await signer.sendTransaction({
           to: swapData.routerAddress,
           data: swapData.data,
-          from: signerAddress,
+          from: address,
+          value: swapData.amountIn,
+          gasLimit: swapData.gas,
         });
       } catch (sendErr) {
         const msg = (sendErr as Error).message || String(sendErr);
+        console.error("Error signing transaction", msg);
         if (
           /UNPREDICTABLE_GAS_LIMIT/i.test(msg) ||
           /TRANSFER_FROM_FAILED/i.test(msg)
@@ -449,11 +451,18 @@ const Knc = () => {
 
       // Wait for transaction confirmation
       const executeSwapTxReceipt = await executeSwapTx.wait();
+
+      // Mark DeFi swap task as completed
+      try {
+        await handleDefiAction("swap");
+      } catch (e) {
+        console.warn("Failed to mark swap task complete:", e);
+      }
       console.log(
         `Swap tx executed with hash: ${executeSwapTxReceipt?.blockHash}`
       );
 
-      return `✅ Swap Transaction Executed Successfully! with hash: ${executeSwapTxReceipt?.blockHash}`;
+  return `✅ Swap Transaction Executed Successfully! with hash: ${executeSwapTxReceipt?.blockHash}`;
     } catch (error) {
       console.error("KyberSwap execution error:", error);
       if (
@@ -601,9 +610,9 @@ const Knc = () => {
 
   // Execute Swap by Symbol Action (integrated with CoinGecko) - with Human-in-the-Loop Slippage Selection
   useCopilotAction({
-    name: "executeKyberSwapBySymbol",
+    name: "SwapTokens",
     description:
-      "Execute a token swap using KyberSwap Aggregator with token symbols. Shows slippage selector before execution.",
+      "Execute a token swap using KyberSwap Aggregator with token symbols. Shows slippage selector before execution. Avoid calling the coingecko api to avoid duplication as it is already being called in the handleGetKyberSwapQuoteBySymbol method.",
     parameters: [
       {
         name: "tokenInSymbol",
@@ -1194,10 +1203,10 @@ const Knc = () => {
 
   const testSwap = async () => {
     const result = await handleExecuteKyberSwapBySymbol({
-      tokenOutSymbol: "USDC",
-      tokenInSymbol: "SKYOPS",
-      amount: "7580",
-      slippageTolerance: 5000,
+      tokenOutSymbol: "GRAY",
+      tokenInSymbol: "USDC",
+      amount: "3",
+      slippageTolerance: 50,
       platform: "ethereum",
     });
 
@@ -1206,133 +1215,13 @@ const Knc = () => {
 
   // Test UI Component
   return (
-    // <div className="flex flex-col gap-4 p-6 bg-gradient-to-br from-green-50 to-emerald-100 rounded-xl border border-green-200">
-    //   <div className="flex items-center gap-3">
-    //     <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
-    //       <span className="text-white font-bold text-sm">K</span>
-    //     </div>
-    //     <h2 className="text-2xl font-bold text-gray-800">
-    //       KyberSwap Aggregator
-    //     </h2>
-    //   </div>
-
-    //   <div className="text-gray-600 mb-4">
-    //     Comprehensive token swapping integration with KyberSwap&apos;s
-    //     aggregator for optimal rates across 100+ DEXes on multiple chains.
-    //   </div>
-
-    //   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-    //     <div className="bg-white p-4 rounded-lg shadow-sm border">
-    //       <h3 className="font-semibold text-gray-800 mb-2">
-    //         🔍 Trading Actions
-    //       </h3>
-    //       <ul className="text-sm text-gray-600 space-y-1">
-    //         <li>• Get Swap Quotes (getKyberSwapQuote)</li>
-    //         <li>• Execute Swaps (executeKyberSwap)</li>
-    //         <li>• Compare Options (compareSwapOptions)</li>
-    //         <li>• Token Information (getTokenInfo)</li>
-    //       </ul>
-    //     </div>
-
-    //     <div className="bg-white p-4 rounded-lg shadow-sm border">
-    //       <h3 className="font-semibold text-gray-800 mb-2">
-    //         🌐 Multi-Chain Support
-    //       </h3>
-    //       <ul className="text-sm text-gray-600 space-y-1">
-    //         <li>• Ethereum, Polygon, BSC</li>
-    //         <li>• Arbitrum, Optimism, Base</li>
-    //         <li>• Avalanche, Fantom, Linea</li>
-    //         <li>• Common Tokens (getCommonTokens)</li>
-    //       </ul>
-    //     </div>
-    //   </div>
-
-    //   <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mt-4">
-    //     <button className="bg-green-500 hover:bg-green-600 text-white rounded-lg p-3 transition-colors text-sm font-medium">
-    //       📊 100+ DEXes
-    //     </button>
-    //     <button className="bg-blue-500 hover:bg-blue-600 text-white rounded-lg p-3 transition-colors text-sm font-medium">
-    //       ⚡ Optimal Routes
-    //     </button>
-    //     <button className="bg-purple-500 hover:bg-purple-600 text-white rounded-lg p-3 transition-colors text-sm font-medium">
-    //       🌍 Multi-Chain
-    //     </button>
-    //     <button
-    //       onClick={testSwap}
-    //       className="bg-orange-500 hover:bg-orange-600 text-white rounded-lg p-3 transition-colors text-sm font-medium"
-    //     >
-    //       🔒 MEV Protection
-    //     </button>
-    //   </div>
-
-    //   {!isConnected && (
-    //     <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-lg">
-    //       <div className="flex items-center gap-2">
-    //         <span className="text-lg">⚠️</span>
-    //         <span className="font-medium">
-    //           Connect your wallet to execute swaps and access all trading
-    //           features
-    //         </span>
-    //       </div>
-    //     </div>
-    //   )}
-
-    //   {isConnected && (
-    //     <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg">
-    //       <div className="flex items-center gap-2">
-    //         <span className="text-lg">✅</span>
-    //         <span className="font-medium">
-    //           Wallet connected! All KyberSwap features are available.
-    //         </span>
-    //       </div>
-    //       <div className="text-sm mt-1 text-green-700">
-    //         Connected as: {address}
-    //       </div>
-    //     </div>
-    //   )}
-
-    //   <div className="mt-4 p-4 bg-green-50 rounded-lg border border-green-200">
-    //     <h4 className="font-semibold text-green-800 mb-2">
-    //       🚀 Quick Start Guide
-    //     </h4>
-    //     <ol className="text-sm text-green-700 space-y-1 list-decimal list-inside">
-    //       <li>
-    //         Ask for &ldquo;kyberSwapOverview&rdquo; to see all capabilities
-    //       </li>
-    //       <li>
-    //         Use &ldquo;getCommonTokens&rdquo; to find popular token addresses
-    //       </li>
-    //       <li>
-    //         Get quotes with &ldquo;getKyberSwapQuote&rdquo; before swapping
-    //       </li>
-    //       <li>
-    //         Compare amounts with &ldquo;compareSwapOptions&rdquo; for
-    //         optimization
-    //       </li>
-    //       <li>
-    //         Execute swaps with &ldquo;executeKyberSwap&rdquo; for best rates
-    //       </li>
-    //     </ol>
-    //   </div>
-
-    //   <div className="mt-2 p-4 bg-blue-50 rounded-lg border border-blue-200">
-    //     <h4 className="font-semibold text-blue-800 mb-2">💡 Pro Features</h4>
-    //     <ul className="text-sm text-blue-700 space-y-1 list-disc list-inside">
-    //       <li>**Smart Routing**: Automatic best path finding across DEXes</li>
-    //       <li>**Gas Optimization**: Minimized transaction costs</li>
-    //       <li>**Price Impact**: Real-time slippage calculations</li>
-    //       <li>**Multi-Hop**: Complex routes for better rates</li>
-    //       <li>**Cross-Chain**: Support for 15+ blockchain networks</li>
-    //     </ul>
-    //   </div>
-    // </div>
-    // <button
-    //   onClick={testSwap}
-    //   className="bg-orange-500 hover:bg-orange-600 text-white rounded-lg p-3 transition-colors text-sm font-medium"
-    // >
-    //   🔒 MEV Protection
-    // </button>
-    null
+    <button
+      onClick={testSwap}
+      className="bg-orange-500 hover:bg-orange-600 text-white rounded-lg p-3 transition-colors text-sm font-medium"
+    >
+      🔒 MEV Protection
+    </button>
+    // null
   );
 };
 
