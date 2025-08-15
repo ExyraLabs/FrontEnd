@@ -120,7 +120,7 @@ const Uniswap = () => {
       const deadline = Math.floor(Date.now() / 1000) + 60 * 20; // 20 minutes from the current Unix time
       const value = trade.inputAmount.raw; // // needs to be converted to e.g. hex
       const valueHex = ethers.BigNumber.from(value.toString()).toHexString(); //convert to hex string
-  // Removed unused Max uint256 constant
+      // Removed unused Max uint256 constant
 
       // Determine which swap function to use based on input/output tokens
       const isInputETH = tokenInData.symbol === "ETH";

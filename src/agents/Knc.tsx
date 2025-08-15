@@ -462,7 +462,7 @@ const Knc = () => {
         `Swap tx executed with hash: ${executeSwapTxReceipt?.blockHash}`
       );
 
-  return `✅ Swap Transaction Executed Successfully! with hash: ${executeSwapTxReceipt?.blockHash}`;
+      return `✅ Swap Transaction Executed Successfully! with hash: ${executeSwapTxReceipt?.blockHash}`;
     } catch (error) {
       console.error("KyberSwap execution error:", error);
       if (

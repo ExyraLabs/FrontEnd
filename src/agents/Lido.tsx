@@ -318,8 +318,8 @@ Network: Ethereum Mainnet
               account: address as `0x${string}`,
               referralAddress: referralAddr,
             });
-              // No on-chain action; do not mark task
-              return `🧪 Stake Simulation Results:
+            // No on-chain action; do not mark task
+            return `🧪 Stake Simulation Results:
 
 📊 Simulation successful for ${amount} ETH stake
 ✅ Transaction would execute successfully
