@@ -7,9 +7,9 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAppDispatch, useAppSelector } from "../store";
 import {
-  recordChatMessage,
   selectChatMessageCount,
   selectDailyMessageLimit,
+  checkDailyReset,
 } from "../store/rewardsSlice";
 import { useChatRoomsMessages } from "../hooks/useChatRoomsMessages";
 import ConnectWalletModal from "./ConnectWalletModal";
@@ -30,25 +30,29 @@ const DefiOptions = [
     title: "Buy",
     icon: "icons/buy.svg",
   },
-  {
-    title: "Lend",
-    icon: "icons/lend.svg",
-  },
-  {
-    title: "Bridge",
-    icon: "icons/bridge.svg",
-  },
+  // {
+  //   title: "Lend",
+  //   icon: "icons/lend.svg",
+  // },
+  // {
+  //   title: "Bridge",
+  //   icon: "icons/bridge.svg",
+  // },
   {
     title: "Stake",
     icon: "icons/stake.svg",
   },
-  {
-    title: "Provide LP",
-    icon: "icons/lp.svg",
-  },
+  // {
+  //   title: "Provide LP",
+  //   icon: "icons/lp.svg",
+  // },
 ];
 const ChatSection = () => {
   const [showDefiOptions, setShowDefiOptions] = useState(false);
+  // Track which DeFi action is selected to show contextual sample prompts
+  const [selectedDefiOption, setSelectedDefiOption] = useState<string | null>(
+    null
+  );
   const { address } = useAppKitAccount();
   const [showModal, setShowModal] = useState(false);
 
@@ -60,6 +64,26 @@ const ChatSection = () => {
   const dispatch = useAppDispatch();
   const count = useAppSelector(selectChatMessageCount);
   const limit = useAppSelector(selectDailyMessageLimit);
+  const effectiveCount = Math.min(count, limit);
+
+  // Contextual sample prompts per DeFi option
+  const DefiSamples: Record<string, string[]> = {
+    Swap: [
+      "Swap 100 USDC to ETH on Base",
+      "What’s the best route to swap 1 ETH to USDC on Arbitrum?",
+      "Swap 50 USDT to wBTC with low slippage",
+    ],
+    Buy: [
+      "Buy $100 of PT/Taktiadocs",
+      "Buy 0.1 ETH using card",
+      "How can I buy USDC on Solana?",
+    ],
+    Stake: [
+      "Stake 0.5 ETH to Lido",
+      "Where can I stake SOL with good APR?",
+      "Stake 100 USDC to earn yield",
+    ],
+  };
 
   // Helper to generate a proper uuid (RFC4122 v4)
   function generateUUID() {
@@ -76,7 +100,11 @@ const ChatSection = () => {
   const handleSendMessage = () => {
     const prompt = inputValue.trim();
     if (!prompt) return;
-    if (count >= limit) return; // enforce daily limit
+    if (!address) {
+      setShowModal(true);
+      return;
+    }
+    if (effectiveCount >= limit) return; // enforce daily limit
     let chatId = generateUUID();
     const chatRooms = loadChatRooms();
     // Ensure unique chatId
@@ -90,15 +118,16 @@ const ChatSection = () => {
     setInputValue("");
     // Switch route to /chat/[id] with prompt as URL parameter
     router.push(`/chat/${chatId}?prompt=${encodeURIComponent(prompt)}`);
-    dispatch(recordChatMessage());
   };
 
   useEffect(() => {
+    // Ensure daily reset runs on mount
+    dispatch(checkDailyReset());
     setMessages([]);
     //eslint-disable-next-line
-  }, []);
+  }, [dispatch]);
   return (
-    <div className=" flex-1 px-4  relative flex flex-col">
+    <div className=" flex-1 px-4 relative flex flex-col">
       <ConnectWalletModal
         isOpen={showModal}
         onClose={() => setShowModal(false)}
@@ -206,6 +235,13 @@ const ChatSection = () => {
                 whileTap={{ scale: 0.95 }}
                 className="bg-[#303131] min-w-max rounded-[14px] text-white px-2.5 lg:px-4 h-[31px] text-[12px] lg:text-xs font-medium lg:mr-2 mb-2 hover:bg-primary/70 duration-500 transition-colors cursor-pointer"
                 onClick={() => {
+                  if (!address) {
+                    setShowModal(true);
+                    return;
+                  }
+                  if (effectiveCount >= limit) {
+                    return; // enforce daily limit
+                  }
                   // Handle example click with URL approach
                   let chatId = generateUUID();
                   const chatRooms = loadChatRooms();
@@ -239,12 +275,7 @@ const ChatSection = () => {
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
-                  if (!address) {
-                    setShowModal(true);
-                    return;
-                  } else {
-                    handleSendMessage();
-                  }
+                  handleSendMessage();
                 }
               }}
             ></motion.textarea>
@@ -284,7 +315,7 @@ const ChatSection = () => {
                       transition={{ duration: 0.2, ease: "easeOut" }}
                       className={`absolute ${
                         showDefiOptions ? "opacity-100" : "opacity-0"
-                      } duration-300 transition-all -top-1 -translate-y-full left-0 w-full px-[5px] py-[9px] flex flex-col gap-2  bg-[#282A2E] rounded-lg z-10`}
+                      } duration-300 transition-all -top-1 -translate-y-full left-0 min-w-[189px] w-full px-[5px] py-[9px] flex flex-col  gap-2  bg-[#282A2E] rounded-lg z-10`}
                     >
                       {DefiOptions.map((option, index) => (
                         <motion.div
@@ -294,6 +325,10 @@ const ChatSection = () => {
                           transition={{ duration: 0.2, delay: index * 0.05 }}
                           whileHover={{ scale: 1.02 }}
                           className="flex items-center gap-2 px-4 py-2 text-white  text-xs cursor-pointer hover:bg-[#1E1F1F] rounded-[14px] w-full text-left transition-colors"
+                          onClick={() => {
+                            setSelectedDefiOption(option.title);
+                            setShowDefiOptions(false);
+                          }}
                         >
                           <Image
                             src={option.icon}
@@ -342,7 +377,7 @@ const ChatSection = () => {
                 {/* Message Counter and Tooltip */}
                 <div className="flex items-center gap-1 relative">
                   <span className="text-[#888888] text-[8px] lg:text-xs font-medium select-none">
-                    {count} / {limit} messages
+                    {effectiveCount} / {limit} messages
                   </span>
                   <div className="relative  flex items-center group">
                     <button
@@ -387,12 +422,7 @@ const ChatSection = () => {
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.9 }}
                   onClick={() => {
-                    if (!address) {
-                      setShowModal(true);
-                      return;
-                    } else {
-                      handleSendMessage();
-                    }
+                    handleSendMessage();
                   }}
                   className="bg-[#A9A0FF] cursor-pointer active:scale-90 hover:bg-primary duration-500 w-[32px] h-[32px] lg:w-[42px] lg:h-[42px] rounded-full flex justify-center items-center"
                 >
@@ -408,6 +438,69 @@ const ChatSection = () => {
               </div>
             </motion.div>
           </motion.div>
+          {/* Contextual sample prompts shown below the input container */}
+          {selectedDefiOption && (
+            <motion.div
+              key={`below-${selectedDefiOption}`}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.25, ease: "easeOut" }}
+              className="w-full lg:w-[90%] mt-3"
+            >
+              <motion.div
+                initial="hidden"
+                animate="visible"
+                variants={{
+                  hidden: { opacity: 0 },
+                  visible: {
+                    opacity: 1,
+                    transition: { staggerChildren: 0.08 },
+                  },
+                }}
+                className="flex flex-col gap-2"
+              >
+                {(DefiSamples[selectedDefiOption] || []).map((sample, idx) => (
+                  <motion.button
+                    key={sample}
+                    variants={{
+                      hidden: { opacity: 0, y: 8 },
+                      visible: { opacity: 1, y: 0 },
+                    }}
+                    whileHover={{ scale: 1.01 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => {
+                      if (!address) {
+                        setShowModal(true);
+                        return;
+                      }
+                      if (effectiveCount >= limit) {
+                        return; // enforce daily limit
+                      }
+                      let chatId = generateUUID();
+                      const chatRooms = loadChatRooms();
+                      while (chatRooms[chatId]) {
+                        chatId = generateUUID();
+                      }
+                      createChatRoom(chatId, "");
+                      router.push(
+                        `/chat/${chatId}?prompt=${encodeURIComponent(sample)}`
+                      );
+                    }}
+                    className="w-full text-left bg-transparent hover:bg-[#1E1F1F] text-white/90 px-3 py-3 rounded-[14px] text-xs flex items-start gap-2"
+                    aria-label={`Use sample prompt ${idx + 1}`}
+                  >
+                    <Image
+                      src="/icons/prompt_star.svg"
+                      alt="sample"
+                      width={18}
+                      height={18}
+                    />
+                    <span className="font-semibold">{sample}</span>
+                  </motion.button>
+                ))}
+              </motion.div>
+            </motion.div>
+          )}
         </motion.div>
       </div>
     </div>

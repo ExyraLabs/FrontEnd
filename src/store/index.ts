@@ -28,6 +28,7 @@ const throttle = (fn: () => void, wait: number) => {
 
 const rewardActionTypes = new Set([
   "rewards/recordChatMessage",
+  "rewards/checkDailyReset",
   "rewards/completeSocialTask",
   "rewards/completeDefiAction",
   "rewards/claimTask",

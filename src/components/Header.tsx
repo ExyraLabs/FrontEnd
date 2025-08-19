@@ -15,7 +15,7 @@ const Header = () => {
       <div className="flex  min-h-[10vh] justify-start items-center px-4 py-3 ">
         {/* Hamburger menu for mobile */}
         <button
-          className="md:hidden mr-3 focus:outline-none"
+          className="md:hidden text-primary mr-3 focus:outline-none"
           aria-label="Toggle sidebar"
           onClick={handleSidebarToggle}
         >

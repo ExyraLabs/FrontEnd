@@ -1,6 +1,6 @@
 import { render, screen, fireEvent } from "@testing-library/react";
 import React from "react";
-import AgentCard from "@/components/AgentCard";
+import AgentCard from "../components/AgentCard";
 
 // Mock next/navigation router
 const pushMock = jest.fn();

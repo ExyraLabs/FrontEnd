@@ -11,17 +11,22 @@ export const updateUserRewardsState = async (
   try {
     const client = await clientPromise;
     const db = client.db("Exyra");
-    const result = await db.collection("users").updateOne(
+    await db.collection("users").updateOne(
       { wallet },
       {
+        // Set/replace the rewards sub-document
         $set: {
           rewards: rewards,
+          updatedAt: new Date(),
         },
-      }
+        // On first save, ensure we create the user document
+        $setOnInsert: {
+          wallet,
+          createdAt: new Date(),
+        },
+      },
+      { upsert: true }
     );
-    if (result.matchedCount === 0) {
-      return { ok: false, message: "User not found" };
-    }
     return { ok: true, message: "Rewards state saved" };
   } catch (e: unknown) {
     const err = e as Error;

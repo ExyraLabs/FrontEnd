@@ -444,11 +444,11 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
     if (chats.length === 0) return null;
 
     return (
-      <div className={showInModal ? "px-5 mt-6" : ""}>
+      <div className={showInModal ? " px-2.5 lg:px-5 mt-6" : ""}>
         <p className="text-[#9A9C9C] font-medium text-sm tracking-[-0.6%] mb-3">
           {title}
         </p>
-        <div className={showInModal ? "px-3" : ""}>
+        <div className={showInModal ? "px-1.5 lg:px-3" : ""}>
           {chats.map(([chatId]) => (
             <ChatItem key={chatId} chatId={chatId} showInModal={showInModal} />
           ))}
@@ -464,7 +464,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
       {/* Overlay for mobile */}
       {typeof open === "boolean" && (
         <div
-          className={`fixed inset-0 z-40 bg-opacity-40 transition-opacity md:hidden ${
+          className={`fixed bg-black inset-0 z-40 opacity-80 md:hidden ${
             open ? "block" : "hidden"
           }`}
           onClick={onClose}
@@ -681,7 +681,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
               setSearchQuery("");
             }}
           />
-          <div className="w-[515px] shadow-[2px_2px_10px] shadow-appGray/30 p-4 fixed left-[50%] -translate-x-1/2 top-[50%] -translate-y-1/2 z-[110] h-[616px]  rounded-[20px] bg-[#303131] mx-auto ">
+          <div className=" w-[90%] lg:w-[515px] shadow-[2px_2px_10px] shadow-appGray/30 p-4 fixed left-[50%] -translate-x-1/2 top-[50%] -translate-y-1/2 z-[110] lg:h-[616px]  rounded-[20px] bg-[#303131] mx-auto ">
             <div className="flex items-center border-b-[0.5px]  border-[#D9D9D9]/40  px-5">
               <svg
                 width="20"
@@ -747,7 +747,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                 }}
               />
             </div>
-            <div className="px-5 mt-6">
+            <div className="lg:px-5 mt-6">
               <p className="text-[#9A9C9C] font-medium text-sm tracking-[-0.6%]">
                 Actions
               </p>
@@ -864,7 +864,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
         </>
       )}
       <div
-        className={`m-4 flex flex-1 flex-col rounded-[14px] bg-appGray z-50 transition-transform duration-200 md:static md:translate-x-0 fixed top-0 left-0  bottom-0 w-72 md:w-auto h-auto ${
+        className={`m-4 flex flex-1 flex-col rounded-[14px] bg-appGray z-50 transition-transform duration-200 md:static md:translate-x-0 fixed top-0 left-0  bottom-0  w-72 md:w-auto h-auto ${
           open === undefined
             ? ""
             : open
@@ -934,8 +934,8 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
         </div>
         <div className="flex flex-col flex-1 pl-8.5">
           {/* Navigation Items */}
-          <nav className="mb-3 lg:mb-6">
-            <ul className="space-y-3">
+          <nav className="mb-4 lg:mb-6">
+            <ul className="space-y-1 lg:space-y-3">
               {navItems.map((item, index) => (
                 // <button key={index} onClick={onClose}>
                 <Link
@@ -947,10 +947,16 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                   }
                   onClick={(e) => {
                     if (item.name === "Search") {
+                      if (onClose) {
+                        onClose();
+                      }
                       e.preventDefault();
                       setShowSavedPromptsModal(false);
                       setShowSearchModal(!showSearchModal);
                     } else if (item.name === "Saved Prompts") {
+                      if (onClose) {
+                        onClose();
+                      }
                       e.preventDefault();
                       setShowSearchModal(false);
                       setShowSavedPromptsModal(!showSavedPromptsModal);
@@ -967,7 +973,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                   <div className="w-8 h-8 flex items-center justify-center">
                     {item.icon}
                   </div>
-                  <span className="text-sm- text-white font-medium">
+                  <span className="text-sm text-white font-medium">
                     {item.name}
                   </span>
                 </Link>
@@ -1068,10 +1074,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                 </li>
               )}
             </ul>
-            <ul
-              suppressHydrationWarning
-              className="flex lg:hidden flex-col gap-4"
-            >
+            <ul suppressHydrationWarning className="flex lg:hidden flex-col">
               {isClient && chatRooms.length > 0 ? (
                 [
                   ...groupedChatRooms.today,
@@ -1079,6 +1082,13 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                   ...groupedChatRooms.previous7Days,
                   ...groupedChatRooms.previous30Days,
                 ]
+                  .sort((a, b) => {
+                    const aDate =
+                      getMostRecentMessageDate(a[1])?.getTime() ?? 0;
+                    const bDate =
+                      getMostRecentMessageDate(b[1])?.getTime() ?? 0;
+                    return bDate - aDate; // newest first
+                  })
                   .slice(0, 3)
                   .map(([chatId]) => (
                     <ChatItem key={chatId} chatId={chatId} isMobile={true} />
@@ -1114,7 +1124,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
           </div>
 
           {/* Bottom Links Section */}
-          <div className=" bg-appDark absolute bottom-5 mr-6 rounded-[12px] p-4 ">
+          <div className=" bg-appDark absolute w-[80%] lg:w-auto bottom-2.5 lg:bottom-5 lg:mr-6 rounded-[12px] p-4 ">
             <Link href={"https://exyra.ai"} className="flex py-2 items-center">
               <p className="text-xs text-white">About Exyra</p>
               <Image src="/icons/arrow.svg" alt="arr" width={20} height={20} />

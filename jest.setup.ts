@@ -1,6 +1,5 @@
 import '@testing-library/jest-dom';
-
-// Silence Next.js router warnings and provide minimal mocks for navigation
+// Single consolidated mock for next/navigation used across tests
 jest.mock('next/navigation', () => {
 	const push = jest.fn();
 	const replace = jest.fn();
@@ -25,19 +24,6 @@ if (typeof window !== 'undefined') {
 	// @ts-expect-error - override in tests
 	window.localStorage = new LocalStorageMock();
 }
-
-import "@testing-library/jest-dom";
-
-// Mock next/navigation hooks used in components
-jest.mock("next/navigation", () => {
-	const push = jest.fn();
-	const replace = jest.fn();
-	const back = jest.fn();
-	return {
-		useRouter: () => ({ push, replace, back }),
-		usePathname: () => "/",
-	};
-});
 
 // Polyfill for ResizeObserver if needed by libraries
 // Basic polyfill for ResizeObserver in test env

@@ -159,6 +159,8 @@ export interface RewardsSliceState {
   chatMessageCount: number;
   dailyMessageLimit: number;
   lastResetDate: string | null; // ISO date (yyyy-mm-dd)
+  // Guard against accidental double increments within the same instant (e.g., Strict Mode quirks)
+  lastIncrementMs?: number | null;
   wallet?: string | null; // current user wallet for persistence
   saving?: boolean;
   lastSaveError?: string | null;
@@ -182,6 +184,7 @@ const buildInitialState = (): RewardsSliceState => {
     chatMessageCount: 0,
     dailyMessageLimit: 30,
     lastResetDate: todayISO(),
+    lastIncrementMs: null,
     wallet: null,
     saving: false,
     lastSaveError: null,
@@ -209,6 +212,7 @@ export const rewardsSlice = createSlice({
       if (state.lastResetDate !== today) {
         state.lastResetDate = today;
         state.chatMessageCount = 0;
+        state.lastIncrementMs = null;
         // reset repeatable tasks (progress & claimed if daily?) - for now only progress of chat tasks
         Object.values(state.tasks).forEach((task) => {
           if (task.category === "chat") {
@@ -220,8 +224,17 @@ export const rewardsSlice = createSlice({
       }
     },
     recordChatMessage(state) {
+      const now = Date.now();
+      if (
+        typeof state.lastIncrementMs === "number" &&
+        now - state.lastIncrementMs <= 200
+      ) {
+        // Ignore duplicate increments that occur within 200ms window
+        return;
+      }
       if (state.chatMessageCount >= state.dailyMessageLimit) return; // cap
       state.chatMessageCount += 1;
+      state.lastIncrementMs = now;
       // Update chat tasks progress
       Object.values(state.tasks).forEach((task) => {
         if (task.actionType === "send-message" && !task.completed) {
@@ -305,9 +318,21 @@ export const rewardsSlice = createSlice({
           // merge persisted minimal structure into runtime tasks
           const persisted = action.payload;
           state.points = persisted.points ?? state.points;
-          state.lastResetDate = persisted.lastResetDate ?? state.lastResetDate;
-          state.chatMessageCount =
-            persisted.chatMessageCount ?? state.chatMessageCount;
+          // Keep the most recent reset date (avoid regressing to an older persisted value)
+          if (persisted.lastResetDate) {
+            const current = state.lastResetDate ?? todayISO();
+            state.lastResetDate =
+              new Date(persisted.lastResetDate) >= new Date(current)
+                ? persisted.lastResetDate
+                : current;
+          }
+          // Do not decrease the local count if we've already incremented for this session.
+          if (typeof persisted.chatMessageCount === "number") {
+            state.chatMessageCount = Math.max(
+              state.chatMessageCount,
+              persisted.chatMessageCount
+            );
+          }
           Object.entries(persisted.tasks || {}).forEach(([taskId, meta]) => {
             if (state.tasks[taskId]) {
               state.tasks[taskId].progress = meta.progress;

@@ -11,7 +11,7 @@ import { useRewardIntegrations } from "@/hooks/useRewardIntegrations";
 // KyberSwap Aggregator API configuration
 const KYBERSWAP_API_BASE = "https://aggregator-api.kyberswap.com";
 const DEFAULT_SLIPPAGE = 50; // 0.5% in bips
-const DEFAULT_CLIENT_ID = "FraktIA-DApp";
+const DEFAULT_CLIENT_ID = "Exyra-DApp";
 
 interface RouteData {
   tokenIn: string;
@@ -23,6 +23,7 @@ interface RouteData {
   gas: string;
   gasPrice: string;
   gasUsd: string;
+  l1FeeUsd?: string;
   route: Array<unknown>;
   routeID: string;
 }
@@ -41,9 +42,23 @@ interface SwapResult {
   gasUsd: string;
 }
 
+// Minimal hop representation from Kyber route needed for summaries
+interface KyberHop {
+  exchange?: string;
+  poolType?: string;
+  pool?: string;
+  tokenIn?: string;
+  tokenOut?: string;
+  swapAmount?: string;
+  amountOut?: string;
+}
+
 const Knc = () => {
   const { address } = useAppKitAccount();
   const { handleDefiAction } = useRewardIntegrations(address);
+
+  // Temporary: support Ethereum mainnet only
+  const isSupportedChain = (chainId: number) => chainId === 1;
 
   // Helper function to resolve token addresses and handle native tokens
   const resolveTokenAddresses = async (
@@ -175,6 +190,7 @@ const Knc = () => {
 
       // Step 2: Convert platform to chain ID and get KyberSwap chain name
       const chainId = platformToChainId(platform);
+
       const kyberChainName = getKyberChainName(chainId);
 
       // Step 3: Get decimals and format amount
@@ -193,7 +209,6 @@ const Knc = () => {
         kyberChainName
       );
       const routeSummary = data.routeSummary;
-
       const inputAmount = formatUnits(
         BigInt(routeSummary.amountIn),
         tokenInDecimals
@@ -202,38 +217,148 @@ const Knc = () => {
         BigInt(routeSummary.amountOut),
         tokenOutData.decimals || 18
       );
+      console.log(routeSummary, "route summary");
 
-      return `💱 KyberSwap Quote Results:
+      // If no route returned, let user know
+      if (!routeSummary.route || routeSummary.route.length === 0) {
+        return `❌ No viable route found for ${amount} ${tokenInSymbol} → ${tokenOutSymbol} on ${platform}.\n\nTips:\n• Try a smaller amount\n• Check token liquidity on this chain\n• Try a different platform (e.g., ethereum)`;
+      }
 
-🔄 **Swap Details**:
-  • Input: ${inputAmount} ${tokenInSymbol} (${tokenInData.name})
-  • Output: ${outputAmount} ${tokenOutSymbol} (${tokenOutData.name})
-  • Rate: 1 ${tokenInSymbol} → ${(
-        Number(outputAmount) / Number(inputAmount)
-      ).toFixed(6)} ${tokenOutSymbol}
+      // Compute path allocations and hop breakdown in human units
+      const totalInWei = BigInt(routeSummary.amountIn || amountInWei);
+      const tokenOutDecimals = tokenOutData.decimals || 18;
 
-💰 **USD Values**:
-  • Input Value: $${parseFloat(routeSummary.amountInUsd).toFixed(2)}
-  • Output Value: $${parseFloat(routeSummary.amountOutUsd).toFixed(2)}
-  • Price Impact: ${(
-    ((parseFloat(routeSummary.amountInUsd) -
-      parseFloat(routeSummary.amountOutUsd)) /
-      parseFloat(routeSummary.amountInUsd)) *
-    100
-  ).toFixed(3)}%
+      const pathSummaries = (routeSummary.route as KyberHop[][]).map(
+        (path: KyberHop[], idx: number) => {
+          const firstHop = path?.[0];
+          const lastHop = path?.[path.length - 1];
+          const pathInWei = firstHop?.swapAmount
+            ? BigInt(String(firstHop.swapAmount))
+            : BigInt(0);
+          const pathOutWei = lastHop?.amountOut
+            ? BigInt(String(lastHop.amountOut))
+            : BigInt(0);
+          const sharePct =
+            totalInWei > BigInt(0)
+              ? Number((pathInWei * BigInt(10000)) / totalInWei) / 100
+              : 0;
+          const pathInHuman = formatUnits(pathInWei, tokenInDecimals);
+          const pathOutHuman = formatUnits(pathOutWei, tokenOutDecimals);
 
-⛽ **Gas Information**:
-  • Estimated Gas: ${parseInt(routeSummary.gas).toLocaleString()} units
-  • Gas Cost: $${parseFloat(routeSummary.gasUsd).toFixed(4)}
+          const hops = path.map((hop: KyberHop) => ({
+            exchange: hop.exchange,
+            poolType: hop.poolType,
+            pool: hop.pool,
+            tokenIn: hop.tokenIn,
+            tokenOut: hop.tokenOut,
+            amountIn: formatUnits(
+              BigInt(String(hop.swapAmount || 0)),
+              tokenInDecimals
+            ),
+            amountOut: formatUnits(
+              BigInt(String(hop.amountOut || 0)),
+              tokenOutDecimals
+            ),
+          }));
 
-🛣️ **Route Information**:
-  • Route ID: ${routeSummary.routeID}
-  • DEXes Used: ${routeSummary.route.length} hop(s)
-  • Router: ${data.routerAddress}
+          return {
+            index: idx + 1,
+            sharePct,
+            in: pathInHuman,
+            out: pathOutHuman,
+            exchanges: Array.from(new Set(hops.map((h) => h.exchange))).join(
+              " → "
+            ),
+            hops,
+          };
+        }
+      );
 
-📊 **Network**: ${platform} (Chain ID: ${chainId})
+      // Effective rate and simple metrics
+      const effectiveRate = Number(outputAmount) / Number(inputAmount || "1");
 
-💡 Use 'executeKyberSwapBySymbol' to perform the actual swap.`;
+      const gasUsd = Number(routeSummary.gasUsd || 0);
+      const l1Usd = Number((routeSummary as RouteData).l1FeeUsd || 0);
+      const totalFeesUsd = gasUsd + l1Usd;
+
+      // Build a concise, readable summary for the agent to show the best route
+      const header = `💱 Best route: ${Number(inputAmount).toLocaleString(
+        undefined,
+        { maximumFractionDigits: 6 }
+      )} ${tokenInSymbol.toUpperCase()} → ${Number(outputAmount).toLocaleString(
+        undefined,
+        { maximumFractionDigits: 6 }
+      )} ${tokenOutSymbol.toUpperCase()} (${platform})`;
+      const usdLine = `≈ $${Number(routeSummary.amountInUsd || 0).toFixed(
+        2
+      )} → $${Number(routeSummary.amountOutUsd || 0).toFixed(
+        2
+      )} | Fees: ~$${totalFeesUsd.toFixed(4)}`;
+      const rateLine = `Est. rate: 1 ${tokenInSymbol.toUpperCase()} ≈ ${effectiveRate.toFixed(
+        6
+      )} ${tokenOutSymbol.toUpperCase()}`;
+
+      const pathLines = pathSummaries
+        .sort((a, b) => b.sharePct - a.sharePct)
+        .slice(0, 3) // show top 3 paths for brevity
+        .map(
+          (p) =>
+            `• Path ${p.index} (${p.sharePct.toFixed(2)}%): ${
+              p.exchanges
+            }\n  In: ${Number(p.in).toLocaleString(undefined, {
+              maximumFractionDigits: 6,
+            })} ${tokenInSymbol.toUpperCase()} → Out: ${Number(
+              p.out
+            ).toLocaleString(undefined, {
+              maximumFractionDigits: 6,
+            })} ${tokenOutSymbol.toUpperCase()}`
+        )
+        .join("\n");
+
+      const meta = `Router: ${data.routerAddress}\nRoute ID: ${routeSummary.routeID}`;
+
+      // Provide a compact JSON blob for advanced UIs (kept small)
+      const compactJson = {
+        chain: kyberChainName,
+        tokenIn: {
+          symbol: tokenInSymbol.toUpperCase(),
+          address: tokenInAddress,
+          decimals: tokenInDecimals,
+          amount: inputAmount,
+          amountUsd: routeSummary.amountInUsd,
+        },
+        tokenOut: {
+          symbol: tokenOutSymbol.toUpperCase(),
+          address: tokenOutAddress,
+          decimals: tokenOutDecimals,
+          amount: outputAmount,
+          amountUsd: routeSummary.amountOutUsd,
+        },
+        fees: {
+          gasUsd: routeSummary.gasUsd,
+          l1FeeUsd: (routeSummary as RouteData).l1FeeUsd || "0",
+        },
+        paths: pathSummaries.map((p) => ({
+          sharePct: p.sharePct,
+          exchanges: p.exchanges,
+        })),
+      };
+
+      return [
+        header,
+        usdLine,
+        rateLine,
+        "",
+        "Top Paths:",
+        pathLines || "• Single-hop path",
+        "",
+        meta,
+        "",
+        "Data (compact):",
+        "```json",
+        JSON.stringify(compactJson, null, 2),
+        "```",
+      ].join("\n");
     } catch (error) {
       console.error("KyberSwap quote error:", error);
       if (
@@ -282,6 +407,9 @@ const Knc = () => {
 
       // Step 2: Convert platform to chain info
       const chainId = platformToChainId(platform);
+      if (!isSupportedChain(chainId)) {
+        return "🚫 Only the Ethereum network is currently supported.";
+      }
       const kyberChainName = getKyberChainName(chainId);
 
       const tokenInDecimals = tokenInData.decimals || 18;
@@ -333,7 +461,12 @@ const Knc = () => {
           address as string,
           tokenInAddress,
           swapData.routerAddress,
-          amount
+          amount,
+          undefined,
+          {
+            expectedChainId: chainId,
+            decimalsHint: tokenInDecimals,
+          }
         );
 
         if (!approvalResult.success) {
@@ -526,9 +659,9 @@ const Knc = () => {
 
   // Get Swap Quote by Symbol Action (integrated with CoinGecko)
   useCopilotAction({
-    name: "getKyberSwapQuoteBySymbol",
+    name: "GettingRoutes",
     description:
-      "Get a swap quote from KyberSwap Aggregator using token symbols. Automatically fetches token addresses from CoinGecko.",
+      "Get a swap quote from KyberSwap Aggregator using token symbols. Automatically fetches token addresses from CoinGecko. Used for getting the best swap routes on different networks.",
     parameters: [
       {
         name: "tokenInSymbol",
@@ -610,7 +743,7 @@ const Knc = () => {
 
   // Execute Swap by Symbol Action (integrated with CoinGecko) - with Human-in-the-Loop Slippage Selection
   useCopilotAction({
-    name: "SwapTokens",
+    name: "Swapping",
     description:
       "Execute a token swap using KyberSwap Aggregator with token symbols. Shows slippage selector before execution. Avoid calling the coingecko api to avoid duplication as it is already being called in the handleGetKyberSwapQuoteBySymbol method.",
     parameters: [
@@ -789,439 +922,27 @@ const Knc = () => {
     handler: handleExecuteKyberSwapBySymbol,
   });
 
-  //   // Token Information Action
-  //   useCopilotAction({
-  //     name: "getTokenInfo",
-  //     description:
-  //       "Get detailed information about a token including its price, symbol, and basic metadata.",
-  //     parameters: [
-  //       {
-  //         name: "tokenAddress",
-  //         type: "string",
-  //         description: "Token contract address to get information for",
-  //         required: true,
-  //       },
-  //       {
-  //         name: "chainId",
-  //         type: "number",
-  //         description: "Chain ID where the token exists. Default: 1 (Ethereum)",
-  //         required: false,
-  //       },
-  //     ],
-  //     handler: async ({
-  //       tokenAddress,
-  //       chainId = 1,
-  //     }: {
-  //       tokenAddress: string;
-  //       chainId?: number;
-  //     }) => {
-  //       try {
-  //         // Simple address validation - basic format check
-  //         if (
-  //           !tokenAddress ||
-  //           tokenAddress.length !== 42 ||
-  //           !tokenAddress.startsWith("0x")
-  //         ) {
-  //           return "❌ Invalid token address provided.";
-  //         }
-
-  //         const kyberChainName = getKyberChainName(chainId);
-
-  //         // Use a small amount to get token info from the routes API
-  //         const url = `${KYBERSWAP_API_BASE}/${kyberChainName}/api/v1/routes`;
-  //         const params = {
-  //           tokenIn: tokenAddress,
-  //           tokenOut: "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE", // Native token
-  //           amountIn: "1000000000000000000", // 1 token (18 decimals)
-  //         };
-
-  //         const response = await axios.get(url, {
-  //           params,
-  //           headers: {
-  //             "X-Client-Id": DEFAULT_CLIENT_ID,
-  //           },
-  //         });
-
-  //         const data = response.data.data;
-  //         const routeSummary = data.routeSummary;
-
-  //         const tokenInPrice = parseFloat(routeSummary.amountInUsd);
-  //         const tokenSymbol = "TOKEN"; // KyberSwap API doesn't return symbol in route summary
-
-  //         return `🪙 Token Information:
-
-  // 📍 **Basic Details**:
-  //   • Address: ${tokenAddress}
-  //   • Network: ${
-  //     kyberChainName.charAt(0).toUpperCase() + kyberChainName.slice(1)
-  //   } (Chain ID: ${chainId})
-  //   • Symbol: ${tokenSymbol} (estimated)
-
-  // 💰 **Price Information**:
-  //   • USD Value: $${tokenInPrice.toFixed(6)} per token
-  //   • Based on current market rates
-
-  // 🔄 **Trading Status**:
-  //   • ✅ Available for trading on KyberSwap
-  //   • Router: ${data.routerAddress}
-
-  // 📊 **Market Data**:
-  //   • Liquidity: Available across multiple DEXes
-  //   • Routes: ${routeSummary.route.length} potential path(s)
-
-  // 💡 This token can be swapped using KyberSwap Aggregator for optimal rates.`;
-  //       } catch (error) {
-  //         console.error("Token info error:", error);
-  //         if (axios.isAxiosError(error)) {
-  //           if (error.response?.status === 400) {
-  //             const chainName = getKyberChainName(chainId);
-  //             return `⚠️ Token information not available:
-
-  // This could mean:
-  //   • Token doesn't exist on ${chainName} (Chain ID: ${chainId})
-  //   • No liquidity available for this token
-  //   • Invalid token contract address
-
-  // 🔧 Please verify:
-  //   • Token address is correct
-  //   • Token exists on the specified chain
-  //   • Token has trading liquidity`;
-  //           }
-  //         }
-  //         return `❌ Error fetching token information: ${
-  //           error instanceof Error ? error.message : "Unknown error"
-  //         }`;
-  //       }
-  //     },
+  // const testSwap = async () => {
+  //   const result = await handleExecuteKyberSwapBySymbol({
+  //     tokenOutSymbol: "GRAY",
+  //     tokenInSymbol: "USDC",
+  //     amount: "3",
+  //     slippageTolerance: 50,
+  //     platform: "ethereum",
   //   });
-
-  //   // Common Tokens Helper Action (using CoinGecko)
-  //   useCopilotAction({
-  //     name: "getCommonTokens",
-  //     description:
-  //       "Get a list of common token addresses for popular tokens on different platforms using CoinGecko integration.",
-  //     parameters: [
-  //       {
-  //         name: "platform",
-  //         type: "string",
-  //         description:
-  //           "Platform name (default: 'ethereum'). Use getAvailablePlatforms to see all options.",
-  //         required: false,
-  //       },
-  //     ],
-  //     handler: handleGetCommonTokens,
-  //   });
-
-  //   // Get Available Platforms Action
-  //   useCopilotAction({
-  //     name: "getAvailablePlatforms",
-  //     description:
-  //       "Get list of all available blockchain platforms supported by CoinGecko integration",
-  //     handler: async () => {
-  //       try {
-  //         const platforms = await getAvailablePlatforms("simple");
-  //         return `🌐 Available Blockchain Platforms (${platforms.length} total):
-
-  // **Popular Platforms**:
-  // ${platforms
-  //   .slice(0, 15)
-  //   .map((platform) => `  • ${platform}`)
-  //   .join("\n")}
-
-  // ${
-  //   platforms.length > 15
-  //     ? `**Additional Platforms**:
-  // ${platforms
-  //   .slice(15, 30)
-  //   .map((platform) => `  • ${platform}`)
-  //   .join("\n")}
-
-  // ...and ${platforms.length - 30} more platforms available.`
-  //     : ""
-  // }
-
-  // 💡 **Common Platform Names**:
-  //   • \`ethereum\` - Ethereum Mainnet
-  //   • \`polygon-pos\` - Polygon
-  //   • \`binance-smart-chain\` - BSC
-  //   • \`arbitrum-one\` - Arbitrum
-  //   • \`optimistic-ethereum\` - Optimism
-  //   • \`avalanche\` - Avalanche C-Chain
-
-  // Use these platform names with other KNC actions for multi-chain token operations.`;
-  //       } catch (error) {
-  //         return `❌ Failed to fetch available platforms: ${
-  //           error instanceof Error ? error.message : "Unknown error"
-  //         }`;
-  //       }
-  //     },
-  //   });
-
-  //   // Swap Preview with Multiple Options
-  //   useCopilotAction({
-  //     name: "compareSwapOptions",
-  //     description:
-  //       "Compare swap options for the same token pair with different amounts to help optimize your trade.",
-  //     parameters: [
-  //       {
-  //         name: "tokenIn",
-  //         type: "string",
-  //         description: "Input token address",
-  //         required: true,
-  //       },
-  //       {
-  //         name: "tokenOut",
-  //         type: "string",
-  //         description: "Output token address",
-  //         required: true,
-  //       },
-  //       {
-  //         name: "amounts",
-  //         type: "string",
-  //         description: "Comma-separated amounts to compare (e.g., '0.1,1,10')",
-  //         required: true,
-  //       },
-  //       {
-  //         name: "chainId",
-  //         type: "number",
-  //         description: "Chain ID for the comparison. Default: 1",
-  //         required: false,
-  //       },
-  //     ],
-  //     handler: async ({
-  //       tokenIn,
-  //       tokenOut,
-  //       amounts,
-  //       chainId = 1,
-  //     }: {
-  //       tokenIn: string;
-  //       tokenOut: string;
-  //       amounts: string;
-  //       chainId?: number;
-  //     }) => {
-  //       try {
-  //         const kyberChainName = getKyberChainName(chainId);
-  //         const amountArray = amounts.split(",").map((a) => a.trim());
-
-  //         if (amountArray.length > 5) {
-  //           return "❌ Maximum 5 amounts can be compared at once.";
-  //         }
-
-  //         const comparisons = [];
-
-  //         for (const amount of amountArray) {
-  //           try {
-  //             const amountInWei = parseUnits(amount, 18).toString();
-  //             const url = `${KYBERSWAP_API_BASE}/${kyberChainName}/api/v1/routes`;
-
-  //             const response = await axios.get(url, {
-  //               params: {
-  //                 tokenIn,
-  //                 tokenOut,
-  //                 amountIn: amountInWei,
-  //               },
-  //               headers: {
-  //                 "X-Client-Id": DEFAULT_CLIENT_ID,
-  //               },
-  //             });
-
-  //             const data = response.data.data;
-  //             const routeSummary = data.routeSummary;
-
-  //             const outputAmount = formatUnits(
-  //               BigInt(routeSummary.amountOut),
-  //               18
-  //             );
-  //             const rate = Number(outputAmount) / Number(amount);
-
-  //             comparisons.push({
-  //               input: amount,
-  //               output: outputAmount,
-  //               rate: rate,
-  //               gasUsd: parseFloat(routeSummary.gasUsd),
-  //               priceImpact:
-  //                 ((parseFloat(routeSummary.amountInUsd) -
-  //                   parseFloat(routeSummary.amountOutUsd)) /
-  //                   parseFloat(routeSummary.amountInUsd)) *
-  //                 100,
-  //             });
-  //           } catch {
-  //             comparisons.push({
-  //               input: amount,
-  //               output: "Error",
-  //               rate: 0,
-  //               gasUsd: 0,
-  //               priceImpact: 0,
-  //             });
-  //           }
-  //         }
-
-  //         const comparisonText = comparisons
-  //           .map((comp, index) => {
-  //             if (comp.output === "Error") {
-  //               return `${index + 1}. Amount: ${
-  //                 comp.input
-  //               } → ❌ Error getting quote`;
-  //             }
-  //             return `${index + 1}. Amount: ${comp.input} tokens
-  //    → Output: ${parseFloat(comp.output).toFixed(6)} tokens
-  //    → Rate: 1:${comp.rate.toFixed(6)}
-  //    → Gas: $${comp.gasUsd.toFixed(4)}
-  //    → Price Impact: ${comp.priceImpact.toFixed(3)}%`;
-  //           })
-  //           .join("\n\n");
-
-  //         // Find best rate
-  //         const validComparisons = comparisons.filter(
-  //           (c) => c.output !== "Error"
-  //         );
-  //         const bestRate =
-  //           validComparisons.length > 0
-  //             ? Math.max(...validComparisons.map((c) => c.rate))
-  //             : 0;
-  //         const bestIndex = validComparisons.findIndex(
-  //           (c) => c.rate === bestRate
-  //         );
-
-  //         return `📊 Swap Options Comparison:
-
-  // ${comparisonText}
-
-  // ${
-  //   validComparisons.length > 0
-  //     ? `
-  // 🎯 **Best Rate**: Option ${
-  //         validComparisons.indexOf(validComparisons[bestIndex]) + 1
-  //       } with rate 1:${bestRate.toFixed(6)}
-
-  // 💡 **Insights**:
-  //   • Consider gas costs vs amount when choosing
-  //   • Larger amounts may have higher price impact
-  //   • Multiple smaller swaps might be more efficient for large amounts
-  // `
-  //     : "❌ No valid quotes available"
-  // }
-
-  // 🔗 Network: ${
-  //           kyberChainName.charAt(0).toUpperCase() + kyberChainName.slice(1)
-  //         }`;
-  //       } catch (error) {
-  //         console.error("Comparison error:", error);
-  //         return `❌ Error comparing swap options: ${
-  //           error instanceof Error ? error.message : "Unknown error"
-  //         }`;
-  //       }
-  //     },
-  //   });
-
-  //   // Overview Action
-  //   useCopilotAction({
-  //     name: "kyberSwapOverview",
-  //     description:
-  //       "Get a comprehensive overview of all available KyberSwap actions and supported features.",
-  //     parameters: [],
-  //     handler: async () => {
-  //       const isWalletConnected = isConnected && address;
-
-  //       return `🌐 KyberSwap Aggregator - Complete Integration Overview
-
-  // ${isWalletConnected ? "✅" : "❌"} Wallet Status: ${
-  //         isWalletConnected ? `Connected (${address})` : "Not Connected"
-  //       }
-
-  // 📋 **Available Actions**:
-
-  // 🔍 **Quote & Analysis** (getKyberSwapQuote)
-  //    • Get best swap rates across multiple DEXes
-  //    • Compare prices and routes before trading
-  //    • View gas costs and price impact
-
-  // ⚡ **Execute Swaps** (executeKyberSwap)
-  //    • Perform actual token swaps on-chain
-  //    • Customizable slippage tolerance
-  //    • Automatic route optimization
-
-  // 🪙 **Token Information** (getTokenInfo)
-  //    • Get token prices and metadata
-  //    • Check trading availability
-  //    • Verify token contracts
-
-  // 📊 **Common Tokens** (getCommonTokens)
-  //    • Access popular token addresses
-  //    • Support for multiple chains
-  //    • Quick reference for major tokens
-
-  // 📈 **Compare Options** (compareSwapOptions)
-  //    • Compare different swap amounts
-  //    • Find optimal trading sizes
-  //    • Analyze rate efficiency
-
-  // 🌍 **Supported Networks**:
-  //    • Ethereum (ETH) - Chain ID: 1
-  //    • Polygon (MATIC) - Chain ID: 137
-  //    • BSC (BNB) - Chain ID: 56
-  //    • Arbitrum (ETH) - Chain ID: 42161
-  //    • Optimism (ETH) - Chain ID: 10
-  //    • Avalanche (AVAX) - Chain ID: 43114
-  //    • Base (ETH) - Chain ID: 8453
-  //    • And many more...
-
-  // 🔧 **Key Features**:
-  //    • Aggregates liquidity from 100+ DEXes
-  //    • Finds optimal swap routes automatically
-  //    • Minimal price impact through smart routing
-  //    • Gas-optimized transactions
-  //    • MEV protection capabilities
-
-  // 💰 **Benefits**:
-  //    • Best rates across all DEXes
-  //    • Single transaction execution
-  //    • Reduced gas costs through batching
-  //    • Higher success rates
-  //    • Real-time pricing
-
-  // 🎯 **Quick Start Guide**:
-  //    1. Use 'getCommonTokens' to find token addresses
-  //    2. Get quotes with 'getKyberSwapQuote'
-  //    3. Compare options with 'compareSwapOptions'
-  //    4. Execute swaps with 'executeKyberSwap'
-
-  // ${
-  //   !isWalletConnected
-  //     ? "\n⚠️  **Note:** Connect your wallet to access swap execution features!"
-  //     : "\n🚀 **Ready to trade!** All features available with your connected wallet."
-  // }
-
-  // 🔗 **Resources**:
-  //    • KyberSwap: https://kyberswap.com
-  //    • Documentation: https://docs.kyberswap.com
-  //    • Analytics: https://analytics.kyberswap.com
-
-  // 💡 **Pro Tip**: Always compare quotes and check gas costs before executing large swaps!`;
-  //     },
-  //   });
-
-  const testSwap = async () => {
-    const result = await handleExecuteKyberSwapBySymbol({
-      tokenOutSymbol: "GRAY",
-      tokenInSymbol: "USDC",
-      amount: "3",
-      slippageTolerance: 50,
-      platform: "ethereum",
-    });
-
-    console.log(result);
-  };
+  //
+  //   console.log(result);
+  // };
 
   // Test UI Component
   return (
-    <button
-      onClick={testSwap}
-      className="bg-orange-500 hover:bg-orange-600 text-white rounded-lg p-3 transition-colors text-sm font-medium"
-    >
-      🔒 MEV Protection
-    </button>
-    // null
+    // <button
+    //   onClick={testSwap}
+    //   className="bg-orange-500 hover:bg-orange-600 text-white rounded-lg p-3 transition-colors text-sm font-medium"
+    // >
+    //   🔒 MEV Protection
+    // </button>
+    null
   );
 };
 

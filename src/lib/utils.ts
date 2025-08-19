@@ -391,7 +391,8 @@ export async function getTokenApprovalEthers(
   tokenContractAddress: string,
   spenderAddress: string,
   spendingAmount: string | number,
-  signer?: ethers.Signer
+  signer?: ethers.Signer,
+  options?: { expectedChainId?: number; decimalsHint?: number }
 ): Promise<{
   success: boolean;
   needsApproval: boolean;
@@ -426,6 +427,29 @@ export async function getTokenApprovalEthers(
       throw new Error("Signer does not have a provider");
     }
 
+    // Optional safety: ensure we're on the expected chain (helps avoid CALL_EXCEPTION when addresses belong to another network)
+    if (options?.expectedChainId) {
+      try {
+        const network = await provider.getNetwork();
+        // ethers v5 returns Network with chainId as number | string; normalize to number
+        const currentChainId =
+          typeof network.chainId === "number"
+            ? network.chainId
+            : parseInt(String(network.chainId));
+        if (currentChainId !== options.expectedChainId) {
+          return {
+            success: false,
+            needsApproval: false,
+            error: new Error(
+              `Wrong network: connected ${currentChainId}, expected ${options.expectedChainId}`
+            ),
+          };
+        }
+      } catch {
+        // Non-fatal; continue
+      }
+    }
+
     // Create contract instance for reading (connected to provider)
     const tokenContractRead = new ethers.Contract(
       tokenContractAddress,
@@ -441,16 +465,15 @@ export async function getTokenApprovalEthers(
     );
 
     // Get token info using the read contract
-    const [decimals, symbol] = await Promise.all([
-      tokenContractRead.decimals(),
-      tokenContractRead.symbol(),
-    ]);
+    // Use provided decimals hint to avoid failing calls on non-ERC20 or mismatched chains
+    const decimals =
+      options?.decimalsHint ?? (await tokenContractRead.decimals());
+    const symbol = await tokenContractRead.symbol().catch(() => "");
 
     // Get current allowance using the read contract
-    const currentAllowance = await tokenContractRead.allowance(
-      userAddress,
-      spenderAddress
-    );
+    const currentAllowance = await tokenContractRead
+      .allowance(userAddress, spenderAddress)
+      .catch(() => ethers.constants.Zero);
 
     // Convert spending amount to proper units
     const spendingAmountBigInt = ethers.utils.parseUnits(

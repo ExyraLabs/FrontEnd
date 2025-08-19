@@ -22,6 +22,7 @@ import {
   useCopilotMessagesContext,
   // internal context gives access to registered actions & their render fns
   useCopilotContext,
+  useCopilotAdditionalInstructions,
 } from "@copilotkit/react-core";
 import { BaseMessage, CombinedToolCall } from "../../../../types";
 // import Uniswap from "@/agents/Uniswap"; // unused currently
@@ -31,6 +32,15 @@ import AlchemyAgent from "@/agents/Alchemy"; // keep used component
 import dynamic from "next/dynamic";
 import Knc from "@/agents/Knc";
 // import { CopilotChat } from "@copilotkit/react-ui"; // not used in custom UI
+import { useAppDispatch, useAppSelector } from "@/store";
+import {
+  checkDailyReset,
+  recordChatMessage,
+  selectChatMessageCount,
+  selectDailyMessageLimit,
+  setWallet,
+  loadRewardsFromDb, // hydrate persisted state
+} from "@/store/rewardsSlice";
 
 const Lido = dynamic(() => import("@/agents/Lido"), {
   ssr: false,
@@ -58,8 +68,16 @@ const Page = () => {
   const messages = getMessages(id);
   const { visibleMessages, appendMessage, isLoading } = useCopilotChat({
     id: id,
+    makeSystemMessage: () =>
+      "I am Agent Exyra, and here to help you in your Defi Journey. To get started, simply give me a prompt.",
+
     // initialMessages: messages,
   });
+  // Rewards / daily limit state
+  const dispatch = useAppDispatch();
+  const count = useAppSelector(selectChatMessageCount);
+  const limit = useAppSelector(selectDailyMessageLimit);
+  const effectiveCount = Math.min(count, limit);
   // Access actions registry (includes render / renderAndWait transformed actions)
   // Access registered actions (casting to any since internal types not exported fully)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -76,18 +94,26 @@ const Page = () => {
   const { setMessages } = useCopilotMessagesContext();
   // Track whether we've hydrated the Copilot context for the current chat id
   const [isHydratedForId, setIsHydratedForId] = useState(false);
+  // Guard to ensure initial prompt from URL is processed only once (React Strict Mode runs effects twice in dev)
+  const initialPromptProcessedRef = useRef(false);
 
   // const handleSendMessage = () => {
   //   console.log(id, "Chat-Id");
   // };
 
   const sendMessage = (content: string) => {
-    if (!content.trim()) return;
-    appendMessage(new TextMessage({ content, role: Role.User }));
+    const trimmed = content.trim();
+    if (!trimmed) return;
+    // Enforce daily limit here to keep logic in one place
+    if (effectiveCount >= limit) return;
+    appendMessage(new TextMessage({ content: trimmed, role: Role.User }));
     setInputValue("");
+    // Single source of truth for counting
+    dispatch(recordChatMessage());
   };
 
   const handleSendMessage = () => {
+    // sendMessage performs limit check and increments count
     sendMessage(inputValue);
   };
 
@@ -198,7 +224,8 @@ const Page = () => {
 
       // KyberSwap/KNC tools
       getKyberSwapQuoteBySymbol: "/icons/kyber.png",
-      SwapTokens: "/icons/kyber.png",
+      GettingRoutes: "/icons/kyber.png",
+      Swapping: "/icons/kyber.png",
       executeKyberSwap: "/icons/kyber.png",
       getTokenInfo: "/icons/kyber.png",
       getCommonTokens: "/icons/kyber.png",
@@ -391,7 +418,7 @@ const Page = () => {
     return (
       <div
         key={`text-${message.id}-${index}`}
-        className={`flex flex-col  w-max max-w-[600px]  relative ${
+        className={`flex flex-col  w-max max-w-[90vw] mb-4 lg:mb-0 lg:max-w-[600px]  relative ${
           isUser ? "self-end" : "self-start"
         }`}
       >
@@ -493,6 +520,8 @@ const Page = () => {
     // On id change, clear current visible messages to avoid saving them under the new id
     setIsHydratedForId(false);
     setMessages([]);
+    // Reset the initial prompt processed guard when navigating to a new chat id
+    initialPromptProcessedRef.current = false;
 
     // If we have stored messages for this chat id and no prompt in URL, hydrate them
     if (messages.length > 0 && !promptFromUrl) {
@@ -513,13 +542,15 @@ const Page = () => {
   }, [id]);
 
   useEffect(() => {
+    // Ensure daily reset runs on mount/render
+    dispatch(checkDailyReset());
     // Load saved prompts state on mount
     const savedPromptsData = loadSavedPrompts();
     const savedContents = new Set(
       savedPromptsData.map((p) => p.content.trim())
     );
     setSavedPrompts(savedContents);
-  }, [loadSavedPrompts]);
+  }, [loadSavedPrompts, dispatch]);
 
   useEffect(() => {
     // Only save if we have messages for the current chat id and after hydration
@@ -547,12 +578,15 @@ const Page = () => {
 
   useEffect(() => {
     // Handle initial prompt from URL (for new chats)
-    if (promptFromUrl) {
+    if (promptFromUrl && !initialPromptProcessedRef.current) {
+      // Mark as processed immediately to avoid duplicate sends in Strict Mode
+      initialPromptProcessedRef.current = true;
       console.log(
         `Sending initial prompt from URL for chat ${id}: ${promptFromUrl}`
       );
       // Ensure we start fresh for this id
       setMessages([]);
+      // sendMessage will enforce limit and increment
       sendMessage(promptFromUrl);
       setIsHydratedForId(true);
       // Clean up URL parameter after sending the message
@@ -566,9 +600,21 @@ const Page = () => {
     //eslint-disable-next-line
   }, [promptFromUrl, id]);
 
+  // Ensure rewards persistence works on chat page: set wallet when available
+  useEffect(() => {
+    if (address) {
+      dispatch(setWallet(address));
+      dispatch(loadRewardsFromDb(address));
+    }
+  }, [address, dispatch]);
+
   useEffect(() => {
     scrollToBottom();
   }, [displayMessages]);
+
+  useCopilotAdditionalInstructions({
+    instructions: `Whenever you are asked about swap routes and information, use the GettingRoutes tool.`,
+  });
 
   return (
     <div className="  h-[88vh] mb-4 px-4 pt-4 relative flex flex-col">
@@ -688,7 +734,7 @@ const Page = () => {
             {/* Message Counter and Tooltip */}
             <div className="flex items-center gap-1 relative">
               <span className="text-[#888888] text-[8px] lg:text-xs font-medium select-none">
-                29 / 30 messages
+                {effectiveCount} / {limit} messages
               </span>
               <div className="relative flex items-center group">
                 <button
