@@ -41,6 +41,8 @@ import {
   setWallet,
   loadRewardsFromDb, // hydrate persisted state
 } from "@/store/rewardsSlice";
+import Uniswap from "@/agents/Uniswap";
+import { withdraw } from "viem/zksync";
 
 const Lido = dynamic(() => import("@/agents/Lido"), {
   ssr: false,
@@ -208,19 +210,24 @@ const Page = () => {
 
       // Uniswap tools
       swapTokens: "/icons/uniswap.png",
+      getUniswapQuote: "/icons/uniswap.png",
+      executeSwap: "/icons/uniswap.png",
 
       // Lido tools
       getLidoContractAddress: "/icons/Lido.png",
       getLidoBalances: "/icons/Lido.png",
-      lidoStakeOperations: "/icons/Lido.png",
-      lidoWrapOperations: "/icons/Lido.png",
-      lidoStatistics: "/icons/Lido.png",
+      wrapETH: "/icons/Lido.png",
+      withdrawstETH: "/icons/Lido.png",
       lidoConversions: "/icons/Lido.png",
       lidoTokenOperations: "/icons/Lido.png",
       lidoRpcConfiguration: "/icons/Lido.png",
       lidoOverview: "/icons/Lido.png",
       lidoStake: "/icons/Lido.png",
       stakeETH: "/icons/Lido.png",
+      lidoStatistics: "/icons/Lido.png",
+      lidoWithdrawalApprove: "/icons/Lido.png",
+      lidoWithdrawalClaim: "/icons/Lido.png",
+      lidoWithdrawalInfo: "/icons/Lido.png",
 
       // KyberSwap/KNC tools
       getKyberSwapQuoteBySymbol: "/icons/kyber.png",
@@ -797,7 +804,7 @@ const Page = () => {
       </motion.div>
 
       <ToolRenderer />
-      {/* <Uniswap /> */}
+      <Uniswap />
       <Lido />
       <Knc />
       <AlchemyAgent />

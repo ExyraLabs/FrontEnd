@@ -2,7 +2,7 @@
 
 import { projectId, wagmiAdapter } from "@/config";
 import { CopilotKit } from "@copilotkit/react-core";
-import { arbitrum, mainnet } from "@reown/appkit/networks";
+import { mainnet } from "@reown/appkit/networks";
 import { createAppKit } from "@reown/appkit/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Session } from "next-auth";
@@ -36,7 +36,7 @@ const metadata = {
 export const modal = createAppKit({
   adapters: [wagmiAdapter],
   projectId,
-  networks: [mainnet, arbitrum],
+  networks: [mainnet],
   defaultNetwork: mainnet,
   metadata: metadata,
   features: {

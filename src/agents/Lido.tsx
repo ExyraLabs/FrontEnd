@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useAppKitAccount } from "@reown/appkit/react";
 import { ethers } from "ethers";
 import { parseUnits } from "viem";
@@ -12,6 +11,7 @@ import {
 // import { mainnet } from "viem/chains"; // kept commented; used in RPC config example
 import { useCopilotAction } from "@copilotkit/react-core";
 import { useRewardIntegrations } from "@/hooks/useRewardIntegrations";
+import { logUserAction } from "@/actions/statistics";
 
 export interface EthereumProvider {
   request(...args: unknown[]): Promise<unknown>;
@@ -41,6 +41,360 @@ const sdk = new LidoSDK({
 const Lido = () => {
   const { address, isConnected } = useAppKitAccount();
   const { handleDefiAction } = useRewardIntegrations(address);
+
+  // Extracted handler functions for testing
+  const handleStakeETH = async ({
+    amount,
+    referralAddress,
+  }: {
+    amount: string;
+    referralAddress?: string;
+  }) => {
+    if (!isConnected || !address) {
+      throw new Error(
+        "Wallet not connected. Please connect your wallet to perform staking operations."
+      );
+    }
+
+    try {
+      const value = parseUnits(amount, 18);
+      const callback = createCallback("Stake ETH");
+      const referralAddr = referralAddress as `0x${string}` | undefined;
+
+      const stakeTx = await sdk.stake.stakeEth({
+        value,
+        callback,
+        referralAddress: referralAddr,
+        account: address as `0x${string}`,
+      });
+
+      if (stakeTx.result) {
+        // Mark DeFi stake task as completed
+        try {
+          await handleDefiAction("stake");
+        } catch (e) {
+          console.warn("Failed to mark stake task complete:", e);
+        }
+
+        // Log stake action to statistics
+        if (address) {
+          try {
+            await logUserAction({
+              address,
+              agent: "Lido",
+              action: "stake",
+              volume: parseFloat(amount),
+              token: "ETH",
+              extra: {
+                stethReceived: ethers.utils.formatEther(
+                  stakeTx.result.stethReceived.toString()
+                ),
+                sharesReceived: ethers.utils.formatEther(
+                  stakeTx.result.sharesReceived.toString()
+                ),
+                txHash: stakeTx.hash,
+                referralAddress,
+              },
+            });
+            console.log("✅ Stake action logged to statistics");
+          } catch (statsError) {
+            console.warn("Failed to log stake statistics:", statsError);
+          }
+        }
+
+        return {
+          success: true,
+          message: `✅ Stake Transaction Successful!
+
+🔄 Transaction Details:
+  • Hash: ${stakeTx.hash}
+  • Amount Staked: ${amount} ETH
+  • stETH Received: ${ethers.utils.formatEther(
+    stakeTx.result.stethReceived.toString()
+  )} stETH
+  • Shares Received: ${ethers.utils.formatEther(
+    stakeTx.result.sharesReceived.toString()
+  )} shares
+  ${referralAddress ? `• Referral: ${referralAddress}` : ""}
+
+🎉 Your ETH has been successfully staked with Lido!`,
+          txHash: stakeTx.hash,
+          stethReceived: stakeTx.result.stethReceived.toString(),
+          sharesReceived: stakeTx.result.sharesReceived.toString(),
+        };
+      } else {
+        throw new Error("Stake transaction failed - no result returned");
+      }
+    } catch (error) {
+      console.error("Staking operation failed:", error);
+      return {
+        success: false,
+        error: `❌ Staking operation failed: ${
+          error instanceof SDKError
+            ? `${error.errorMessage} (Code: ${error.code})`
+            : error instanceof Error
+            ? error.message
+            : "Unknown error"
+        }`,
+      };
+    }
+  };
+
+  // Extracted handler for withdrawal requests (unstake)
+  const handleUnstakeETH = async ({
+    mode,
+    token,
+    amount,
+  }: {
+    mode: string;
+    token: string;
+    amount: string;
+  }) => {
+    if (!isConnected || !address) {
+      throw new Error("Wallet not connected. Connect wallet first.");
+    }
+
+    const tokenNorm = token.toLowerCase();
+    if (!["steth", "wsteth"].includes(tokenNorm)) {
+      throw new Error("Invalid token. Use 'stETH' or 'wstETH'.");
+    }
+
+    try {
+      const callback = createCallback(
+        `Withdrawal Request (${mode.toLowerCase()})`
+      );
+      const tokenParam = tokenNorm === "steth" ? "stETH" : "wstETH";
+
+      // Narrow typing for transaction-like objects returned by SDK
+      interface WithdrawalRequestTxResultItem {
+        id?: bigint | string;
+        stringId?: string;
+        amountOfStETH?: bigint;
+        amount?: bigint;
+      }
+      interface WithdrawalRequestTxLike {
+        hash?: string;
+        result?: { requests?: WithdrawalRequestTxResultItem[] };
+        results?: { requests?: WithdrawalRequestTxResultItem[] };
+      }
+
+      let tx: WithdrawalRequestTxLike;
+      if (mode.toLowerCase() === "permit") {
+        tx = (await sdk.withdraw.request.requestWithdrawalWithPermit({
+          amount: parseUnits(amount, 18),
+          token: tokenParam,
+          callback,
+          account: address as `0x${string}`,
+        })) as WithdrawalRequestTxLike;
+      } else if (mode.toLowerCase() === "allowance") {
+        tx = (await sdk.withdraw.request.requestWithdrawal({
+          amount: parseUnits(amount, 18),
+          token: tokenParam,
+          callback,
+          account: address as `0x${string}`,
+        })) as WithdrawalRequestTxLike;
+      } else {
+        throw new Error("Unknown mode. Use 'permit' or 'allowance'.");
+      }
+
+      const created: WithdrawalRequestTxResultItem[] =
+        tx?.result?.requests || tx?.results?.requests || [];
+
+      // Log withdrawal request action to statistics
+      if (address) {
+        try {
+          await logUserAction({
+            address,
+            agent: "Lido",
+            action: "withdraw_request",
+            volume: parseFloat(amount),
+            token: tokenParam,
+            extra: {
+              operation: "withdrawalRequest",
+              mode,
+              tokenParam,
+              requestCount: created.length,
+              requestIds: created.map((r) =>
+                typeof r.id === "bigint" ? r.id.toString() : r.id ?? r.stringId
+              ),
+              txHash: tx.hash,
+            },
+          });
+          console.log("✅ Withdrawal request action logged to statistics");
+        } catch (statsError) {
+          console.warn(
+            "Failed to log withdrawal request statistics:",
+            statsError
+          );
+        }
+      }
+
+      const lines = created
+        .map((r) => {
+          const amt = r.amountOfStETH
+            ? ethers.utils.formatEther(r.amountOfStETH.toString())
+            : r.amount
+            ? ethers.utils.formatEther(r.amount.toString())
+            : "?";
+          return `  • ID: ${
+            typeof r.id === "bigint" ? r.id.toString() : r.id ?? r.stringId
+          } | Amount (stETH): ${amt}`;
+        })
+        .join("\n");
+
+      return {
+        success: true,
+        message: `✅ Withdrawal Request Submitted (${mode.toUpperCase()})\n\n🔄 Transaction Hash: ${
+          tx.hash
+        }\n🪙 Token: ${tokenParam}\n💰 Requested Amount: ${amount} ${tokenParam}\n📜 Created Requests:\n${
+          lines || "  • (No request objects returned)"
+        }\n\n⏱️ Next Step: Wait for finalization, then use withdraw to claim ETH.`,
+        txHash: tx.hash,
+        requestIds: created.map((r) =>
+          typeof r.id === "bigint" ? r.id.toString() : r.id ?? r.stringId
+        ),
+        requestCount: created.length,
+      };
+    } catch (error) {
+      console.error("Withdrawal request failed:", error);
+      return {
+        success: false,
+        error: `❌ Withdrawal request failed: ${
+          error instanceof SDKError
+            ? `${error.errorMessage} (Code: ${error.code})`
+            : error instanceof Error
+            ? error.message
+            : "Unknown error"
+        }`,
+      };
+    }
+  };
+
+  // Extracted handler for withdrawal claims
+  const handleWithdrawETH = async ({
+    requestsIds,
+  }: {
+    requestsIds?: string;
+  }) => {
+    if (!isConnected || !address) {
+      throw new Error("Wallet not connected.");
+    }
+
+    try {
+      let ids: bigint[];
+      if (requestsIds) {
+        ids = requestsIds
+          .split(",")
+          .map((x) => x.trim())
+          .filter(Boolean)
+          .map((x) => BigInt(x));
+      } else {
+        const claimable =
+          await sdk.withdraw.requestsInfo.getClaimableRequestsInfo({
+            account: address as `0x${string}`,
+          });
+        ids =
+          claimable?.claimableRequests?.map((r: { id: bigint | string }) =>
+            BigInt(r.id)
+          ) || [];
+        if (!ids.length) {
+          return {
+            success: false,
+            error: "ℹ️ No claimable requests found.",
+          };
+        }
+      }
+
+      const callback = createCallback("Claim Withdrawals");
+      const tx = await sdk.withdraw.claim.claimRequests({
+        requestsIds: ids,
+        callback,
+        account: address as `0x${string}`,
+      });
+
+      const claimed: {
+        id?: bigint | string;
+        stringId?: string;
+        amountOfETH?: bigint;
+        amountOfStETH?: bigint;
+      }[] = tx?.result?.requests || [];
+
+      // Log withdrawal claim action to statistics
+      if (address) {
+        try {
+          const totalEthClaimed = claimed.reduce((sum, c) => {
+            const ethAmount = c.amountOfETH || c.amountOfStETH || BigInt(0);
+            return (
+              sum + parseFloat(ethers.utils.formatEther(ethAmount.toString()))
+            );
+          }, 0);
+
+          await logUserAction({
+            address,
+            agent: "Lido",
+            action: "withdraw_claim",
+            volume: totalEthClaimed,
+            token: "ETH",
+            extra: {
+              operation: "withdrawalClaim",
+              requestCount: claimed.length,
+              claimedIds: claimed.map((c) =>
+                typeof c.id === "bigint" ? c.id.toString() : c.id || c.stringId
+              ),
+              txHash: tx.hash,
+            },
+          });
+          console.log("✅ Withdrawal claim action logged to statistics");
+        } catch (statsError) {
+          console.warn(
+            "Failed to log withdrawal claim statistics:",
+            statsError
+          );
+        }
+      }
+
+      const lines = claimed
+        .map(
+          (c) =>
+            `  • ID: ${
+              typeof c.id === "bigint" ? c.id.toString() : c.id || c.stringId
+            } | ETH: ${
+              c.amountOfETH
+                ? ethers.utils.formatEther(c.amountOfETH.toString())
+                : c.amountOfStETH
+                ? ethers.utils.formatEther(c.amountOfStETH.toString())
+                : "?"
+            }`
+        )
+        .join("\n");
+
+      return {
+        success: true,
+        message: `✅ Withdrawal Claims Executed\n\n🔄 Transaction Hash: ${
+          tx.hash
+        }\n📦 Requests Claimed: ${ids.length}\n🧾 Details:\n${
+          lines || "  • (No request detail objects returned)"
+        }\n\nFunds should appear as ETH in your wallet after finalization & claim.`,
+        txHash: tx.hash,
+        claimedIds: claimed.map((c) =>
+          typeof c.id === "bigint" ? c.id.toString() : c.id || c.stringId
+        ),
+        claimedCount: claimed.length,
+      };
+    } catch (error) {
+      console.error("Claim failed:", error);
+      return {
+        success: false,
+        error: `❌ Claim failed: ${
+          error instanceof SDKError
+            ? `${error.errorMessage} (Code: ${error.code})`
+            : error instanceof Error
+            ? error.message
+            : "Unknown error"
+        }`,
+      };
+    }
+  };
 
   // Helper function to create transaction callback
   const createCallback =
@@ -237,7 +591,7 @@ Network: Ethereum Mainnet
 
   // Staking Actions
   useCopilotAction({
-    name: "lidoStakeOperations",
+    name: "stakeETH",
     description:
       "Perform various Lido staking operations including staking ETH, simulating stakes, and getting estimates.",
     parameters: [
@@ -276,41 +630,12 @@ Network: Ethereum Mainnet
 
       try {
         const value = parseUnits(amount, 18);
-        const callback = createCallback("Stake ETH");
         const referralAddr = referralAddress as `0x${string}` | undefined;
 
         switch (operation.toLowerCase()) {
           case "stake":
-            const stakeTx = await sdk.stake.stakeEth({
-              value,
-              callback,
-              referralAddress: referralAddr,
-              account: address as `0x${string}`,
-            });
-
-            if (stakeTx.result) {
-              // Mark DeFi stake task as completed
-              try {
-                await handleDefiAction("stake");
-              } catch (e) {
-                console.warn("Failed to mark stake task complete:", e);
-              }
-              return `✅ Stake Transaction Successful!
-
-🔄 Transaction Details:
-  • Hash: ${stakeTx.hash}
-  • Amount Staked: ${amount} ETH
-  • stETH Received: ${ethers.utils.formatEther(
-    stakeTx.result.stethReceived.toString()
-  )} stETH
-  • Shares Received: ${ethers.utils.formatEther(
-    stakeTx.result.sharesReceived.toString()
-  )} shares
-  ${referralAddress ? `• Referral: ${referralAddress}` : ""}
-
-🎉 Your ETH has been successfully staked with Lido!`;
-            }
-            break;
+            const result = await handleStakeETH({ amount, referralAddress });
+            return result.success ? result.message : result.error;
 
           case "simulate":
             await sdk.stake.stakeEthSimulateTx({
@@ -369,7 +694,7 @@ Data: ${populateResult.data}
 
   // Wrap/Unwrap Actions
   useCopilotAction({
-    name: "lidoWrapOperations",
+    name: "wrapETH",
     description:
       "Perform Lido wrap/unwrap operations including wrapping ETH to wstETH, wrapping stETH to wstETH, and unwrapping wstETH to stETH.",
     parameters: [
@@ -412,6 +737,31 @@ Data: ${populateResult.data}
             });
 
             if (wrapEthTx.result) {
+              // Log wrap action to statistics
+              if (address) {
+                try {
+                  await logUserAction({
+                    address,
+                    agent: "Lido",
+                    action: "wrap",
+                    volume: parseFloat(amount),
+                    token: "ETH",
+                    extra: {
+                      operation: "wrapEth",
+                      stethWrapped: ethers.utils.formatEther(
+                        wrapEthTx.result.stethWrapped.toString()
+                      ),
+                      wstethReceived: ethers.utils.formatEther(
+                        wrapEthTx.result.wstethReceived.toString()
+                      ),
+                      txHash: wrapEthTx.hash,
+                    },
+                  });
+                  console.log("✅ Wrap ETH action logged to statistics");
+                } catch (statsError) {
+                  console.warn("Failed to log wrap statistics:", statsError);
+                }
+              }
               return `✅ Wrap ETH Transaction Successful!
 
 🔄 Transaction Details:
@@ -449,6 +799,31 @@ Required: ${amount} stETH
             });
 
             if (wrapStethTx.result) {
+              // Log wrap stETH action to statistics
+              if (address) {
+                try {
+                  await logUserAction({
+                    address,
+                    agent: "Lido",
+                    action: "wrap",
+                    volume: parseFloat(amount),
+                    token: "stETH",
+                    extra: {
+                      operation: "wrapSteth",
+                      stethWrapped: ethers.utils.formatEther(
+                        wrapStethTx.result.stethWrapped.toString()
+                      ),
+                      wstethReceived: ethers.utils.formatEther(
+                        wrapStethTx.result.wstethReceived.toString()
+                      ),
+                      txHash: wrapStethTx.hash,
+                    },
+                  });
+                  console.log("✅ Wrap stETH action logged to statistics");
+                } catch (statsError) {
+                  console.warn("Failed to log wrap statistics:", statsError);
+                }
+              }
               return `✅ Wrap stETH Transaction Successful!
 
 🔄 Transaction Details:
@@ -471,6 +846,31 @@ Required: ${amount} stETH
             });
 
             if (unwrapTx.result) {
+              // Log unwrap action to statistics
+              if (address) {
+                try {
+                  await logUserAction({
+                    address,
+                    agent: "Lido",
+                    action: "unwrap",
+                    volume: parseFloat(amount),
+                    token: "wstETH",
+                    extra: {
+                      operation: "unwrap",
+                      wstethUnwrapped: ethers.utils.formatEther(
+                        unwrapTx.result.wstethUnwrapped.toString()
+                      ),
+                      stethReceived: ethers.utils.formatEther(
+                        unwrapTx.result.stethReceived.toString()
+                      ),
+                      txHash: unwrapTx.hash,
+                    },
+                  });
+                  console.log("✅ Unwrap action logged to statistics");
+                } catch (statsError) {
+                  console.warn("Failed to log unwrap statistics:", statsError);
+                }
+              }
               return `✅ Unwrap Transaction Successful!
 
 🔄 Transaction Details:
@@ -793,6 +1193,27 @@ Output: ${ethers.utils.formatEther(sharesFromSteth.toString())} shares
               callback,
             });
 
+            // Log transfer action to statistics
+            if (address) {
+              try {
+                await logUserAction({
+                  address,
+                  agent: "Lido",
+                  action: "transfer",
+                  volume: parseFloat(amount),
+                  token: "stETH",
+                  extra: {
+                    operation: "transferSteth",
+                    toAddress,
+                    txHash: transferStethTx.hash,
+                  },
+                });
+                console.log("✅ Transfer stETH action logged to statistics");
+              } catch (statsError) {
+                console.warn("Failed to log transfer statistics:", statsError);
+              }
+            }
+
             return `✅ stETH Transfer Successful!
 
 🔄 Transaction Details:
@@ -810,6 +1231,27 @@ Output: ${ethers.utils.formatEther(sharesFromSteth.toString())} shares
               account: address as `0x${string}`,
               callback,
             });
+
+            // Log transfer action to statistics
+            if (address) {
+              try {
+                await logUserAction({
+                  address,
+                  agent: "Lido",
+                  action: "transfer",
+                  volume: parseFloat(amount),
+                  token: "wstETH",
+                  extra: {
+                    operation: "transferWsteth",
+                    toAddress,
+                    txHash: transferWstethTx.hash,
+                  },
+                });
+                console.log("✅ Transfer wstETH action logged to statistics");
+              } catch (statsError) {
+                console.warn("Failed to log transfer statistics:", statsError);
+              }
+            }
 
             return `✅ wstETH Transfer Successful!
 
@@ -905,155 +1347,103 @@ Spender: ${toAddress}
   // Withdrawal / Unstaking Actions
   // ================================
 
-  // 1. Request Withdrawal (with permit or allowance)
+  // // 1. Request Withdrawal (with permit or allowance)
+  // useCopilotAction({
+  //   name: "withdrawstETH",
+  //   description:
+  //     "Create withdrawal requests for stETH or wstETH (permit-based for EOAs or allowance-based). Returns created request IDs.",
+  //   parameters: [
+  //     {
+  //       name: "mode",
+  //       type: "string",
+  //       description:
+  //         "Request mode: 'permit' (EOA only) or 'allowance' (pre-approved).",
+  //       required: true,
+  //     },
+  //     {
+  //       name: "token",
+  //       type: "string",
+  //       description: "Token to withdraw: 'stETH' or 'wstETH'.",
+  //       required: true,
+  //     },
+  //     {
+  //       name: "amount",
+  //       type: "string",
+  //       description:
+  //         "Amount to withdraw (ETH-denominated). Provide either amount OR requestsIds.",
+  //       required: false,
+  //     },
+  //     {
+  //       name: "requestsIds",
+  //       type: "string",
+  //       description:
+  //         "Comma-separated existing withdrawal request IDs (mutually exclusive with amount).",
+  //       required: false,
+  //     },
+  //   ],
+  //   handler: async ({
+  //     mode,
+  //     token,
+  //     amount,
+  //     requestsIds,
+  //   }: {
+  //     mode: string;
+  //     token: string;
+  //     amount?: string;
+  //     requestsIds?: string;
+  //   }) => {
+  //     if (!amount && !requestsIds) {
+  //       return "❌ Provide either 'amount' or 'requestsIds'.";
+  //     }
+  //     if (amount && requestsIds) {
+  //       return "❌ Provide only one of 'amount' or 'requestsIds', not both.";
+  //     }
+
+  //     if (requestsIds) {
+  //       return "❌ Direct request IDs not supported in this interface. Use amount to create new withdrawal requests.";
+  //     }
+
+  //     if (!amount) {
+  //       return "❌ Amount is required for creating withdrawal requests.";
+  //     }
+
+  //     const result = await handleUnstakeETH({ mode, token, amount });
+  //     return result.success ? result.message : result.error;
+  //   },
+  // });
+
+  // 2. Approve Withdrawal Queue
   useCopilotAction({
-    name: "lidoWithdrawalRequest",
-    description:
-      "Create withdrawal requests for stETH or wstETH (permit-based for EOAs or allowance-based). Returns created request IDs.",
+    name: "withdrawstETH",
+    description: "Request stETH/wstETH withdrawal to the Lido Withdrawal Queue",
     parameters: [
       {
         name: "mode",
         type: "string",
-        description:
-          "Request mode: 'permit' (EOA only) or 'allowance' (pre-approved).",
+        description: "permit or allowance",
         required: true,
       },
       {
         name: "token",
         type: "string",
-        description: "Token to withdraw: 'stETH' or 'wstETH'.",
+        description: "stETH or wstETH",
         required: true,
       },
       {
         name: "amount",
         type: "string",
-        description:
-          "Amount to withdraw (ETH-denominated). Provide either amount OR requestsIds.",
-        required: false,
-      },
-      {
-        name: "requestsIds",
-        type: "string",
-        description:
-          "Comma-separated existing withdrawal request IDs (mutually exclusive with amount).",
-        required: false,
+        description: "Amount to withdraw",
+        required: true,
       },
     ],
-    handler: async ({
-      mode,
-      token,
-      amount,
-      requestsIds,
-    }: {
-      mode: string;
-      token: string;
-      amount?: string;
-      requestsIds?: string;
-    }) => {
-      if (!isConnected || !address) {
-        return "❌ Wallet not connected. Connect wallet first.";
-      }
-
-      const tokenNorm = token.toLowerCase();
-      if (!["steth", "wsteth"].includes(tokenNorm)) {
-        return "❌ Invalid token. Use 'stETH' or 'wstETH'.";
-      }
-      if (!amount && !requestsIds) {
-        return "❌ Provide either 'amount' or 'requestsIds'.";
-      }
-      if (amount && requestsIds) {
-        return "❌ Provide only one of 'amount' or 'requestsIds', not both.";
-      }
-
-      try {
-        const callback = createCallback(
-          `Withdrawal Request (${mode.toLowerCase()})`
-        );
-        let parsedRequests: bigint[] | undefined;
-        if (requestsIds) {
-          parsedRequests = requestsIds
-            .split(",")
-            .map((x) => x.trim())
-            .filter(Boolean)
-            .map((x) => BigInt(x));
-        }
-        const tokenParam = tokenNorm === "steth" ? "stETH" : "wstETH";
-
-        // Narrow typing for transaction-like objects returned by SDK
-        interface WithdrawalRequestTxResultItem {
-          id?: bigint | string;
-          stringId?: string;
-          amountOfStETH?: bigint;
-          amount?: bigint;
-        }
-        interface WithdrawalRequestTxLike {
-          hash?: string;
-          result?: { requests?: WithdrawalRequestTxResultItem[] };
-          results?: { requests?: WithdrawalRequestTxResultItem[] };
-        }
-        let tx: WithdrawalRequestTxLike;
-        if (mode.toLowerCase() === "permit") {
-          tx = (await (
-            sdk as unknown as { withdrawals: any }
-          ).withdrawals.request.requestWithPermit({
-            ...(parsedRequests
-              ? { requests: parsedRequests }
-              : { amount: parseUnits(amount as string, 18) }),
-            token: tokenParam,
-            callback,
-            account: address as `0x${string}`,
-          })) as WithdrawalRequestTxLike;
-        } else if (mode.toLowerCase() === "allowance") {
-          tx = (await (
-            sdk as unknown as { withdrawals: any }
-          ).withdrawals.request.requestWithdrawal({
-            ...(parsedRequests
-              ? { requests: parsedRequests }
-              : { amount: parseUnits(amount as string, 18) }),
-            token: tokenParam,
-            callback,
-            account: address as `0x${string}`,
-          })) as WithdrawalRequestTxLike;
-        } else {
-          return "❌ Unknown mode. Use 'permit' or 'allowance'.";
-        }
-
-        const created: WithdrawalRequestTxResultItem[] =
-          tx?.result?.requests || tx?.results?.requests || [];
-
-        const lines = created
-          .map((r) => {
-            const amt = r.amountOfStETH
-              ? ethers.utils.formatEther(r.amountOfStETH.toString())
-              : r.amount
-              ? ethers.utils.formatEther(r.amount.toString())
-              : "?";
-            return `  • ID: ${
-              typeof r.id === "bigint" ? r.id.toString() : r.id ?? r.stringId
-            } | Amount (stETH): ${amt}`;
-          })
-          .join("\n");
-
-        return `✅ Withdrawal Request Submitted (${mode.toUpperCase()})\n\n🔄 Transaction Hash: ${
-          tx.hash
-        }\n🪙 Token: ${tokenParam}\n${
-          amount
-            ? `💰 Requested Amount: ${amount} ${tokenParam}`
-            : `📦 Using Existing Requests: ${parsedRequests?.length}`
-        }\n📜 Created Requests:\n${
-          lines || "  • (No request objects returned)"
-        }\n\n⏱️ Next Step: Wait for finalization, then use lidoWithdrawalClaim to claim ETH.`;
-      } catch (error) {
-        console.error("Withdrawal request failed:", error);
-        return `❌ Withdrawal request failed: ${
-          error instanceof SDKError
-            ? `${error.errorMessage} (Code: ${error.code})`
-            : error instanceof Error
-            ? error.message
-            : "Unknown error"
-        }`;
-      }
+    handler: async ({ mode, token, amount }) => {
+      const result = await handleUnstakeETH({ mode, token, amount });
+      return result.success ? result.message : result.error;
     },
+  });
+  // 2. Approve Withdrawal Queue
+  useCopilotAction({
+    name: "lidoWithdrawalApprove",
   });
 
   // 2. Approve Withdrawal Queue
@@ -1122,9 +1512,7 @@ Spender: ${toAddress}
       try {
         const value = parseUnits(amount, 18);
         const tokenParam = tokenNorm === "steth" ? "stETH" : "wstETH";
-        const tx = await (
-          sdk as unknown as { withdrawals: any }
-        ).withdrawals.approval.approve({
+        const tx = await sdk.withdraw.approval.approve({
           amount: value,
           token: tokenParam,
           callback: approveCallback,
@@ -1159,70 +1547,8 @@ Spender: ${toAddress}
       },
     ],
     handler: async ({ requestsIds }: { requestsIds?: string }) => {
-      if (!isConnected || !address) return "❌ Wallet not connected.";
-      try {
-        let ids: bigint[];
-        if (requestsIds) {
-          ids = requestsIds
-            .split(",")
-            .map((x) => x.trim())
-            .filter(Boolean)
-            .map((x) => BigInt(x));
-        } else {
-          const claimable = await (
-            sdk as unknown as { withdrawals: any }
-          ).withdrawals.views.getClaimableRequestsInfo({
-            account: address as `0x${string}`,
-          });
-          ids =
-            claimable?.claimableRequests?.map((r: { id: bigint | string }) =>
-              BigInt(r.id)
-            ) || [];
-          if (!ids.length) return "ℹ️ No claimable requests found.";
-        }
-        const callback = createCallback("Claim Withdrawals");
-        const tx = await (
-          sdk as unknown as { withdrawals: any }
-        ).withdrawals.claim.claimRequests({
-          requestsIds: ids,
-          callback,
-          account: address as `0x${string}`,
-        });
-        const claimed: {
-          id?: bigint | string;
-          stringId?: string;
-          amountOfETH?: bigint;
-          amountOfStETH?: bigint;
-        }[] = tx?.result?.requests || tx?.results?.requests || [];
-        const lines = claimed
-          .map(
-            (c) =>
-              `  • ID: ${
-                typeof c.id === "bigint" ? c.id.toString() : c.id || c.stringId
-              } | ETH: ${
-                c.amountOfETH
-                  ? ethers.utils.formatEther(c.amountOfETH.toString())
-                  : c.amountOfStETH
-                  ? ethers.utils.formatEther(c.amountOfStETH.toString())
-                  : "?"
-              }`
-          )
-          .join("\n");
-        return `✅ Withdrawal Claims Executed\n\n🔄 Transaction Hash: ${
-          tx.hash
-        }\n📦 Requests Claimed: ${ids.length}\n🧾 Details:\n${
-          lines || "  • (No request detail objects returned)"
-        }\n\nFunds should appear as ETH in your wallet after finalization & claim.`;
-      } catch (error) {
-        console.error("Claim failed:", error);
-        return `❌ Claim failed: ${
-          error instanceof SDKError
-            ? `${error.errorMessage} (Code: ${error.code})`
-            : error instanceof Error
-            ? error.message
-            : "Unknown error"
-        }`;
-      }
+      const result = await handleWithdrawETH({ requestsIds });
+      return result.success ? result.message : result.error;
     },
   });
 
@@ -1290,11 +1616,10 @@ Spender: ${toAddress}
 
         switch (infoType.toLowerCase()) {
           case "requestsinfo": {
-            const info = await (
-              sdk as unknown as { withdrawals: any }
-            ).withdrawals.views.getWithdrawalRequestsInfo({
-              account: address as `0x${string}`,
-            });
+            const info =
+              await sdk.withdraw.requestsInfo.getWithdrawalRequestsInfo({
+                account: address as `0x${string}`,
+              });
             return `📦 Withdrawal Requests Info\n\nClaimable Requests: ${
               info.claimableInfo.claimableRequests.length
             }\nClaimable Amount (stETH): ${ethers.utils.formatEther(
@@ -1308,18 +1633,17 @@ Spender: ${toAddress}
             )}\n\nUse 'lidoWithdrawalInfo' with infoType 'status' for per-request detail.`;
           }
           case "status": {
-            const statuses = await (
-              sdk as unknown as { withdrawals: any }
-            ).withdrawals.views.getWithdrawalRequestsStatus({
-              account: address as `0x${string}`,
-            });
+            const statuses =
+              await sdk.withdraw.requestsInfo.getWithdrawalRequestsStatus({
+                account: address as `0x${string}`,
+              });
             type StatusType = {
               id: bigint;
               isFinalized: boolean;
               isClaimed: boolean;
               amountOfStETH: bigint;
             };
-            const statusesTyped = statuses as StatusType[];
+            const statusesTyped = statuses as unknown as StatusType[];
             const filtered = parsedIds.length
               ? statusesTyped.filter((s) => parsedIds.some((id) => id === s.id))
               : statusesTyped;
@@ -1343,9 +1667,7 @@ Spender: ${toAddress}
             }\n\nUse 'waitingTimeByIds' to estimate time to finalization.`;
           }
           case "claimable": {
-            const c = await (
-              sdk as unknown as { withdrawals: any }
-            ).withdrawals.views.getClaimableRequestsInfo({
+            const c = await sdk.withdraw.requestsInfo.getClaimableRequestsInfo({
               account: address as `0x${string}`,
             });
             return `💰 Claimable Requests\n\nCount: ${
@@ -1359,11 +1681,10 @@ Spender: ${toAddress}
             }\n\nUse lidoWithdrawalClaim to claim them.`;
           }
           case "claimableethbyaccount": {
-            const r = await (
-              sdk as unknown as { withdrawals: any }
-            ).withdrawals.views.getClaimableRequestsETHByAccount({
-              account: address as `0x${string}`,
-            });
+            const r =
+              await sdk.withdraw.requestsInfo.getClaimableRequestsETHByAccount({
+                account: address as `0x${string}`,
+              });
             return `💎 Claimable ETH (By Account)\n\nRequests: ${
               r.requests.length
             }\nETH Sum: ${ethers.utils.formatEther(
@@ -1376,9 +1697,7 @@ Spender: ${toAddress}
             }`;
           }
           case "pending": {
-            const p = await (
-              sdk as unknown as { withdrawals: any }
-            ).withdrawals.views.getPendingRequestsInfo({
+            const p = await sdk.withdraw.requestsInfo.getPendingRequestsInfo({
               account: address as `0x${string}`,
             });
             return `⏳ Pending Requests\n\nCount: ${
@@ -1393,11 +1712,10 @@ Spender: ${toAddress}
           }
           case "waitingtimebyamount": {
             const val = amount ? parseUnits(amount, 18) : undefined;
-            const w = await (
-              sdk as unknown as { withdrawals: any }
-            ).withdrawals.views.getWithdrawalWaitingTimeByAmount({
-              amount: val,
-            });
+            const w =
+              await sdk.withdraw.waitingTime.getWithdrawalWaitingTimeByAmount({
+                amount: val,
+              });
             return `⏱️ Waiting Time (By Amount)\n\nRequested Amount: ${
               amount || "(SDK default queue context)"
             }\nStatus: ${w.status}\nFinalization In (ms): ${
@@ -1409,23 +1727,24 @@ Spender: ${toAddress}
           case "waitingtimebyids": {
             if (!parsedIds.length)
               return "❌ Provide 'ids' for waitingTimeByIds.";
-            const arr = await (
-              sdk as unknown as { withdrawals: any }
-            ).withdrawals.views.getWithdrawalWaitingTimeByRequestIds({
-              ids: parsedIds,
-            });
+            const arr =
+              await sdk.withdraw.waitingTime.getWithdrawalWaitingTimeByRequestIds(
+                {
+                  ids: parsedIds,
+                }
+              );
             const lines = arr
               .map(
-                (i: {
-                  requestInfo: {
-                    requestId: string;
-                    finalizationAt: string;
-                    finalizationIn: number;
-                    type: string;
-                  };
-                  status: string;
-                }) =>
-                  `  • ID ${i.requestInfo.requestId} | Finalization At: ${i.requestInfo.finalizationAt} | In(ms): ${i.requestInfo.finalizationIn} | Type: ${i.requestInfo.type} | Status: ${i.status}`
+                (i) =>
+                  `  • ID ${
+                    i.requestInfo?.requestId || "N/A"
+                  } | Finalization At: ${
+                    i.requestInfo?.finalizationAt || "N/A"
+                  } | In(ms): ${
+                    i.requestInfo?.finalizationIn || "N/A"
+                  } | Type: ${i.requestInfo?.type || "N/A"} | Status: ${
+                    i.status || "N/A"
+                  }`
               )
               .join("\n");
             return `⏱️ Waiting Time (By IDs)\n\n${lines}`;
@@ -1440,27 +1759,13 @@ Spender: ${toAddress}
               isBunker,
               isTurbo,
             ] = await Promise.all([
-              (
-                sdk as unknown as { withdrawals: any }
-              ).withdrawals.views.minStethWithdrawalAmount(),
-              (
-                sdk as unknown as { withdrawals: any }
-              ).withdrawals.views.maxStethWithdrawalAmount(),
-              (
-                sdk as unknown as { withdrawals: any }
-              ).withdrawals.views.minWStethWithdrawalAmount(),
-              (
-                sdk as unknown as { withdrawals: any }
-              ).withdrawals.views.maxWStethWithdrawalAmount(),
-              (
-                sdk as unknown as { withdrawals: any }
-              ).withdrawals.views.isPaused(),
-              (
-                sdk as unknown as { withdrawals: any }
-              ).withdrawals.views.isBunkerModeActive(),
-              (
-                sdk as unknown as { withdrawals: any }
-              ).withdrawals.views.isTurboModeActive(),
+              sdk.withdraw.views.minStethWithdrawalAmount(),
+              sdk.withdraw.views.maxStethWithdrawalAmount(),
+              sdk.withdraw.views.minWStethWithdrawalAmount(),
+              sdk.withdraw.views.maxWStethWithdrawalAmount(),
+              sdk.withdraw.views.isPaused(),
+              sdk.withdraw.views.isBunkerModeActive(),
+              sdk.withdraw.views.isTurboModeActive(),
             ]);
             return `📐 Withdrawal Constants\n\nMin stETH: ${ethers.utils.formatEther(
               minSteth.toString()
@@ -1478,9 +1783,7 @@ Spender: ${toAddress}
             if (infoType.toLowerCase() === "checkallowance" && !amount)
               return "❌ Provide 'amount' for checkAllowance.";
             if (infoType.toLowerCase() === "allowance") {
-              const allowance = await (
-                sdk as unknown as { withdrawals: any }
-              ).withdrawals.approval.getAllowance({
+              const allowance = await sdk.withdraw.approval.getAllowance({
                 token: tokenParam,
                 account: address as `0x${string}`,
               });
@@ -1488,9 +1791,7 @@ Spender: ${toAddress}
                 allowance.toString()
               )} ${tokenParam}\nUse lidoWithdrawalApprove to increase if needed.`;
             } else {
-              const check = await (
-                sdk as unknown as { withdrawals: any }
-              ).withdrawals.approval.checkAllowance({
+              const check = await sdk.withdraw.approval.checkAllowance({
                 token: tokenParam,
                 amount: parseUnits(amount as string, 18),
                 account: address as `0x${string}`,
@@ -1498,16 +1799,14 @@ Spender: ${toAddress}
               return `🔍 Allowance Check\n\nToken: ${tokenParam}\nRequired: ${amount} ${tokenParam}\nCurrent Allowance: ${ethers.utils.formatEther(
                 check.allowance.toString()
               )} ${tokenParam}\nNeeds Approval: ${
-                check.needsApproval ? "YES" : "NO"
+                check.needsApprove ? "YES" : "NO"
               }`;
             }
           }
           case "splitamount": {
             if (!tokenParam || !amount)
               return "❌ Provide both 'token' and 'amount' for splitAmount.";
-            const split = await (
-              sdk as unknown as { withdrawals: any }
-            ).withdrawals.request.splitAmountToRequests({
+            const split = await sdk.withdraw.request.splitAmountToRequests({
               token: tokenParam,
               amount: parseUnits(amount, 18),
             });
@@ -1537,174 +1836,54 @@ Spender: ${toAddress}
     },
   });
 
-  // RPC Configuration Helper
-  useCopilotAction({
-    name: "lidoRpcConfiguration",
-    description:
-      "Get guidance on configuring better RPC providers for full Lido SDK functionality, especially for statistics and APR data.",
-    parameters: [],
-    handler: async () => {
-      return `🔧 Lido SDK RPC Configuration Guide
+  // Test functions commented out to prevent accidental execution
+  const testStake = async () => {
+    const stakeResult = await handleStakeETH({
+      amount: "0.001", // 0.01 ETH
+      referralAddress: undefined,
+    });
+    console.log("✅ Stake result:", stakeResult);
+  };
 
-⚠️ **Current Issue**: Public RPC endpoints limit log queries to ~1000 blocks, but APR calculations need larger ranges.
+  const testUnstake = async () => {
+    const unstakeResult = await handleUnstakeETH({
+      mode: "permit",
+      token: "stETH",
+      amount: "0.001", // 0.01 stETH
+    });
+    console.log("✅ Unstake result:", unstakeResult);
+  };
 
-🚀 **Recommended RPC Providers** (with higher limits):
-
-1. **Alchemy** 
-   • URL: \`https://eth-mainnet.g.alchemy.com/v2/YOUR_API_KEY\`
-   • Limits: Much higher log query limits
-   • Free tier: 300M compute units/month
-   • Sign up: https://alchemy.com
-
-2. **Infura**
-   • URL: \`https://mainnet.infura.io/v3/YOUR_PROJECT_ID\`
-   • Limits: 100,000 requests/day free
-   • Good for production use
-   • Sign up: https://infura.io
-
-3. **QuickNode**
-   • URL: Custom endpoint provided
-   • Limits: Very high, enterprise-grade
-   • Free tier available
-   • Sign up: https://quicknode.com
-
-4. **Cloudflare (Current)**
-   • URL: \`https://cloudflare-eth.com\`
-   • Limits: Moderate, better than default
-   • Free but has some restrictions
-
-📝 **How to Configure**:
-
-\`\`\`typescript
-const rpcProvider = createPublicClient({
-  chain: mainnet,
-  transport: http("YOUR_RPC_ENDPOINT_HERE"),
-  batch: {
-    multicall: true,
-  },
-});
-
-const sdk = new LidoSDK({
-  chainId: 1,
-  rpcProvider,
-  web3Provider: LidoSDKCore.createWeb3Provider(1, window.ethereum),
-});
-\`\`\`
-
-💡 **Benefits of Premium RPC**:
-  • ✅ Full APR statistics functionality
-  • ✅ Real-time data access
-  • ✅ Higher rate limits
-  • ✅ Better reliability
-  • ✅ Historical data queries
-
-🎯 **Quick Test**: Once configured, try:
-  • \`lidoStatistics\` with type "lastApr"
-  • \`lidoStatistics\` with type "smaApr" and days: 7
-
-🔗 **Alternative Data Sources** (if RPC config isn't possible):
-  • Lido Official: https://lido.fi
-  • DeFiPulse: APR tracking
-  • DefiLlama: Yield comparison
-  • Dune Analytics: Historical charts
-
-📊 **Current Status**: Using Cloudflare RPC (moderate limits)
-⭐ **Recommendation**: Upgrade to Alchemy or Infura for full functionality`;
-    },
-  });
-
-  // Overview Action
-  useCopilotAction({
-    name: "lidoOverview",
-    description:
-      "Get a comprehensive overview of all available Lido SDK actions and their capabilities.",
-    parameters: [],
-    handler: async () => {
-      const isWalletConnected = isConnected && address;
-
-      return `🌊 Lido Ethereum SDK - Complete Action Overview
-
-${isWalletConnected ? "✅" : "❌"} Wallet Status: ${
-        isWalletConnected ? `Connected (${address})` : "Not Connected"
-      }
-
-📋 Available Action Groups:
-
-🏛️ **Contract Addresses** (getLidoContractAddress)
-   • Get addresses for Lido protocol contracts
-   • Available contracts: lido (stETH), wsteth, withdrawalQueue
-
-💰 **Balance Information** (getLidoBalances)
-   • Check ETH, stETH, wstETH, and shares balances
-   • View individual or all balances at once
-
-🥩 **Staking Operations** (lidoStakeOperations)
-   • Stake ETH to receive stETH
-   • Simulate stakes and estimate gas
-   • Operations: stake, simulate, estimateGas, populate
-
-🔄 **Wrap/Unwrap Operations** (lidoWrapOperations)
-   • Wrap ETH directly to wstETH
-   • Wrap stETH to wstETH
-   • Unwrap wstETH back to stETH
-   • Manage approvals and allowances
-
-📊 **Statistics & APR** (lidoStatistics)
-   • Get current and historical APR data
-   • View protocol statistics and performance metrics
-   • Track Simple Moving Average APR
-
-🔀 **Token Conversions** (lidoConversions)
-   • Convert between shares and stETH
-   • Understand the underlying shares mechanism
-
-💸 **Token Operations** (lidoTokenOperations)
-   • Transfer stETH and wstETH tokens
-   • Approve spending allowances
-   • Check current allowances
-
-🔧 **Configuration** (lidoRpcConfiguration)
-   • Guide for setting up better RPC providers
-   • Solutions for APR data access issues
-   • Premium endpoint recommendations
-
-🎯 **Key Features:**
-   • Liquid staking - earn rewards while keeping liquidity
-   • No minimum stake requirement
-   • Daily reward distribution through rebasing (stETH)
-   • Fixed balance token option (wstETH) for DeFi integration
-   • Full transaction lifecycle with callbacks
-
-💡 **Getting Started:**
-   1. Connect your wallet
-   2. Use lidoStatistics to check current APR
-   3. Use lidoStakeOperations to stake ETH
-   4. Use lidoWrapOperations to get wstETH for DeFi
-
-🔗 **Useful Resources:**
-   • Lido Finance: https://lido.fi
-   • Documentation: https://docs.lido.fi
-   • SDK Docs: https://lidofinance.github.io/lido-ethereum-sdk/
-
-${
-  !isWalletConnected
-    ? "\n⚠️  **Note:** Connect your wallet to access transaction features!"
-    : "\n🚀 **Ready to go!** All features are available with your connected wallet."
-}`;
-    },
-  });
-
-  // Test helper commented out to avoid unused warnings
-  // const test = async () => {
-  //   try {
-  //     const lastApr = await sdk.statistics.apr.getLastApr();
-  //     console.log(`⚡ Lido Protocol - Last APR:\n\nLast APR: ${lastApr.toFixed(2)}%\n\n💡 This is the most recent APR for stETH staking rewards.`);
-  //   } catch (error) {
-  //     console.error("Test APR fetch failed:", error);
-  //   }
-  // };
+  const testWithdraw = async () => {
+    const withdrawResult = await handleWithdrawETH({
+      requestsIds: undefined, // Auto-claim all claimable
+    });
+    console.log("✅ Withdraw result:", withdrawResult);
+  };
 
   // Test UI
+  return;
+  // <div className="flex gap-2">
+  //   <button
+  //     onClick={testStake}
+  //     className="bg-blue-500 hover:bg-blue-600 text-white rounded-lg p-3 transition-colors text-sm font-medium"
+  //   >
+  //     🥩 Test Stake
+  //   </button>
+  //   <button
+  //     onClick={testUnstake}
+  //     className="bg-orange-500 hover:bg-orange-600 text-white rounded-lg p-3 transition-colors text-sm font-medium"
+  //   >
+  //     📤 Test Unstake
+  //   </button>
+  //   <button
+  //     onClick={testWithdraw}
+  //     className="bg-green-500 hover:bg-green-600 text-white rounded-lg p-3 transition-colors text-sm font-medium"
+  //   >
+  //     💰 Test Withdraw
+  //   </button>
+  // </div>
+
   return null;
 };
 

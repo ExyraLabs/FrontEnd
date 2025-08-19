@@ -9,6 +9,7 @@ import { useState, useMemo, useEffect } from "react";
 import { Message } from "@copilotkit/runtime-client-gql";
 import GradientLine from "./GradientLine";
 import { socialLinks } from "@/utils/constants";
+import { getChatRelativeTime } from "@/utils/timeUtils";
 
 interface SidebarProps {
   open?: boolean;
@@ -367,6 +368,10 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
     const displayText = getChatTitle(chatId);
     const isActive = currentChatId === chatId;
 
+    // Get the chat messages to calculate relative time
+    const chatMessages = isClient ? chatRoomsObj[chatId] || [] : [];
+    const relativeTime = getChatRelativeTime(chatMessages);
+
     // Highlight matching text for search results
     const highlightText = (text: string, query: string) => {
       if (!query?.trim()) return text;
@@ -390,7 +395,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
       <li
         key={chatId}
         className={`text-xs w-full text-white cursor-pointer flex items-center duration-200 transition-all justify-between group px-3 py-2 ${
-          showInModal ? "my-2" : ""
+          showInModal ? "my-4" : ""
         } ${
           isActive
             ? "bg-appDark rounded-[8px]"
@@ -407,13 +412,22 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
         onMouseEnter={showInModal ? undefined : () => setHoveredChatId(chatId)}
         onMouseLeave={showInModal ? undefined : () => setHoveredChatId(null)}
       >
-        <span
-          className={`truncate text-white flex-1 ${isMobile ? "" : "mr-2"}`}
-        >
-          {highlightSearchQuery
-            ? highlightText(displayText, highlightSearchQuery)
-            : displayText}
-        </span>
+        <div className="flex  gap-6 items-center flex-1 min-w-0">
+          <span
+            className={`truncate text-white ${
+              showInModal ? "text-sm min-w-[75%]" : "text-xs"
+            }`}
+          >
+            {highlightSearchQuery
+              ? highlightText(displayText, highlightSearchQuery)
+              : displayText}
+          </span>
+          {showInModal && relativeTime && (
+            <span className="text-gray-400 whitespace-nowrap text-xs mt-1">
+              {relativeTime}
+            </span>
+          )}
+        </div>
         {hoveredChatId === chatId && !showInModal && (
           <button
             className="duration-500 cursor-pointer hover:scale-125 flex-shrink-0"
@@ -480,7 +494,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
               setPromptSearchQuery("");
             }}
           />
-          <div className="w-[515px] shadow-[2px_2px_10px] shadow-appGray/30 p-4 fixed left-[50%] -translate-x-1/2 top-[50%] -translate-y-1/2 z-[110] h-[616px] rounded-[20px] bg-[#303131] mx-auto">
+          <div className="w-[515px] shadow-[2px_2px_10px] shadow-appGray/30 p-4 fixed left-[50%] -translate-x-1/2 top-[50%] -translate-y-1/2 z-[110] h-[616px] rounded-[20px] flex flex-col bg-[#303131] mx-auto">
             <div className="flex items-center border-b-[0.5px] border-[#D9D9D9]/40 px-5">
               <svg
                 width="20"
@@ -545,7 +559,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
             </div>
 
             {/* Saved Prompts List */}
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1  scrollbar-hide overflow-y-auto">
               {filteredSavedPrompts.length === 0 ? (
                 <div className="px-5 mt-6">
                   <p className="text-[#9A9C9C] font-medium text-sm tracking-[-0.6%]">
@@ -675,13 +689,13 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
         <>
           {/* Overlay for search modal */}
           <div
-            className="fixed  inset-0 z-[100]   bg-opacity-50 transition-opacity"
+            className="fixed  inset-0 z-[100] bg-black  opacity-50 transition-opacity"
             onClick={() => {
               setShowSearchModal(false);
               setSearchQuery("");
             }}
           />
-          <div className=" w-[90%] lg:w-[515px] shadow-[2px_2px_10px] shadow-appGray/30 p-4 fixed left-[50%] -translate-x-1/2 top-[50%] -translate-y-1/2 z-[110] lg:h-[616px]  rounded-[20px] bg-[#303131] mx-auto ">
+          <div className=" w-[90%] lg:w-[515px] shadow-[2px_2px_10px] shadow-appGray/30 p-4 fixed left-[50%] -translate-x-1/2 top-[50%] -translate-y-1/2 z-[110] lg:h-[616px] flex flex-col  rounded-[20px] bg-[#303131] mx-auto ">
             <div className="flex items-center border-b-[0.5px]  border-[#D9D9D9]/40  px-5">
               <svg
                 width="20"
@@ -776,7 +790,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
             </div>
 
             {/* Search Results or Default Groups */}
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1  scrollbar-hide overflow-y-auto">
               {searchQuery.trim() ? (
                 // Show search results
                 <>

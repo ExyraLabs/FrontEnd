@@ -120,13 +120,13 @@ const AgentCard: React.FC<AgentCardProps> = ({
                   <path
                     d="M18 8.991c-4.693 0-8.491 3.816-8.491 8.509 0-4.693-3.816-8.509-8.509-8.509 4.693 0 8.509-3.798 8.509-8.491A8.486 8.486 0 0018 8.991z"
                     fill="currentColor"
-                    stroke="currentColor"
+                    stroke="#A79EF5"
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   />
                 </svg>
               </span>
-              <span className="text-left text-xs lg:text-sm text-primary">
+              <span className="text-left text-xs lg:text-sm text-[#A79EF5]">
                 {prompt}
               </span>
             </button>

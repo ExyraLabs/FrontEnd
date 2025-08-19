@@ -69,12 +69,12 @@ const ChatSection = () => {
   // Contextual sample prompts per DeFi option
   const DefiSamples: Record<string, string[]> = {
     Swap: [
-      "Swap 100 USDC to ETH on Base",
-      "What’s the best route to swap 1 ETH to USDC on Arbitrum?",
-      "Swap 50 USDT to wBTC with low slippage",
+      "Swap 10 USDC to ETH on Ethereum",
+      "What’s the best route to swap 1 ETH to USDC on Ethereum?",
+      "Swap 10 USDT to wBTC with low slippage",
     ],
     Buy: [
-      "Buy $100 of PT/Taktiadocs",
+      "Buy $10 of PT/Taktiadocs",
       "Buy 0.1 ETH using card",
       "How can I buy USDC on Solana?",
     ],

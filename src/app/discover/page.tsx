@@ -38,28 +38,28 @@ const AGENT_CARDS = [
     ],
     prompts: [
       // "How can I stake my ETH?",
-      "Withdraw all Lido stETH in my wallet.",
+      "Withdraw all Lido stETH in my wallet -Lido.",
       "Stake $4 worth of ETH for me.",
     ],
     chains: ["Ethereum"],
   },
-  // {
-  //   icon: "/icons/uniswap.png",
-  //   title: "Uniswap",
-  //   subtitle: "Decentralized exchange for swapping tokens",
-  //   category: "Swap",
-  //   features: [
-  //     // "Swap any ERC-20 token instantly",
-  //     "Provide liquidity and earn fees",
-  //     "Access deep liquidity pools",
-  //   ],
-  //   prompts: [
-  //     // "Swap 10 USDC to ETH",
-  //     "Swap $4 worth of ETH for SKYOPS token for me",
-  //     "Swap 0.0002ETH to USDT",
-  //   ],
-  //   chains: ["Ethereum", "Arbitrum", "Optimism"],
-  // },
+  {
+    icon: "/icons/uniswap.png",
+    title: "Uniswap",
+    subtitle: "Decentralized exchange for swapping tokens",
+    category: "Swap",
+    features: [
+      // "Swap any ERC-20 token instantly",
+      "Provide liquidity and earn fees",
+      "Access deep liquidity pools",
+    ],
+    prompts: [
+      // "Swap 10 USDC to ETH",
+      "Swap $4 worth of ETH for SKYOPS -Uniswap",
+      "Swap 0.0002ETH to USDT -Uniswap",
+    ],
+    chains: ["Ethereum"],
+  },
   {
     icon: "/icons/kyber.png",
     title: "KyberSwap",
@@ -73,9 +73,9 @@ const AGENT_CARDS = [
     prompts: [
       // "Swap 5 BNB to USDT on BSC",
       "Show KyberSwap rates for ETH/USDT",
-      "Swap 0.001 ETH to USDT on Ethereum",
+      "Swap 0.001 ETH to USDT on Ethereum -KyberSwap",
     ],
-    chains: ["Ethereum", "BNB Smart Chain", "Base"],
+    chains: ["Ethereum"],
   },
   {
     icon: "/icons/gecko.png",
@@ -91,7 +91,7 @@ const AGENT_CARDS = [
       "What is the current price of Bitcoin?",
       "What is the brand image for Ethereum?",
     ],
-    chains: ["Ethereum", "BNB Smart Chain", "Base"],
+    chains: ["Ethereum"],
   },
   // {
   //   icon: "/icons/curve.jpeg",
@@ -124,7 +124,7 @@ const AGENT_CARDS = [
       // "Show me NFTs in my wallet",
       "Check the balance of my address",
     ],
-    chains: ["Ethereum", "Arbitrum", "Optimism", "Solana"],
+    chains: ["Ethereum"],
   },
   // {
   //   icon: "/icons/curve.jpeg",

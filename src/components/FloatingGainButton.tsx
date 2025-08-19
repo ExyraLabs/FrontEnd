@@ -91,6 +91,9 @@ const FloatingGainButton = () => {
   };
 
   const currentRecommendation = recommendations[activeTab];
+  if (true) {
+    return null;
+  }
 
   return (
     <>

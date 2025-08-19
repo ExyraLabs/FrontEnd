@@ -576,16 +576,56 @@ const Knc = () => {
             prefErr
           );
         }
+      } else {
+        // For ETH swaps, check ETH balance
+        try {
+          const ethBalance = await signer.getBalance();
+          const requiredEth = BigInt(swapData.amountIn);
+          const gasEstimate = BigInt(swapData.gas);
+          const gasPrice = await signer.getGasPrice();
+          const gasPriceBigInt = BigInt(gasPrice.toString());
+          const totalRequired = requiredEth + gasEstimate * gasPriceBigInt;
+
+          console.log(
+            `🔎 Pre-flight ETH balance=${ethers.utils.formatEther(
+              ethBalance
+            )} required=${ethers.utils.formatEther(
+              totalRequired.toString()
+            )} (${ethers.utils.formatEther(requiredEth.toString())} swap + gas)`
+          );
+
+          if (ethBalance.lt(totalRequired.toString())) {
+            return `❌ Insufficient ETH balance. Need ${ethers.utils.formatEther(
+              totalRequired.toString()
+            )} ETH (${ethers.utils.formatEther(
+              requiredEth.toString()
+            )} for swap + gas), have ${ethers.utils.formatEther(
+              ethBalance
+            )} ETH.`;
+          }
+        } catch (prefErr) {
+          console.log(
+            "Pre-flight ETH balance check failed (continuing):",
+            prefErr
+          );
+        }
       }
 
       let executeSwapTx;
       try {
+        // For ERC20 to ETH/native swaps, value should be 0
+        // For ETH to ERC20 swaps, value should be the ETH amount
+        const transactionValue =
+          tokenInAddress === "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"
+            ? swapData.amountIn
+            : "0";
+
         executeSwapTx = await signer.sendTransaction({
           to: swapData.routerAddress,
           data: swapData.data,
           from: address,
-          value: swapData.amountIn,
-          gasLimit: swapData.gas,
+          value: transactionValue,
+          gasLimit: Math.floor(parseInt(swapData.gas) * 1).toString(), // Add 20% buffer for gas
         });
       } catch (sendErr) {
         const msg = (sendErr as Error).message || String(sendErr);
@@ -930,56 +970,56 @@ const Knc = () => {
   });
 
   // Execute Swap Action (renamed and updated to use symbols)
-  useCopilotAction({
-    name: "executeKyberSwap",
-    description:
-      "Execute a token swap using KyberSwap Aggregator with token symbols. This performs the actual on-chain transaction.",
-    parameters: [
-      {
-        name: "tokenInSymbol",
-        type: "string",
-        description: "Input token symbol (e.g., 'ETH', 'USDC', 'BTC')",
-        required: true,
-      },
-      {
-        name: "tokenOutSymbol",
-        type: "string",
-        description: "Output token symbol (e.g., 'USDC', 'ETH', 'DAI')",
-        required: true,
-      },
-      {
-        name: "amount",
-        type: "string",
-        description:
-          "Amount of input token to swap (in token units, e.g., '1.0' for 1 token)",
-        required: true,
-      },
-      {
-        name: "platform",
-        type: "string",
-        description: "Blockchain platform (default: 'ethereum')",
-        required: false,
-      },
-      {
-        name: "slippageTolerance",
-        type: "number",
-        description:
-          "Slippage tolerance in bips (e.g., 50 = 0.5%, 100 = 1%). Default: 50",
-        required: false,
-      },
-    ],
-    handler: handleExecuteKyberSwapBySymbol,
-  });
+  // useCopilotAction({
+  //   name: "executeKyberSwap",
+  //   description:
+  //     "Execute a token swap using KyberSwap Aggregator with token symbols. This performs the actual on-chain transaction.",
+  //   parameters: [
+  //     {
+  //       name: "tokenInSymbol",
+  //       type: "string",
+  //       description: "Input token symbol (e.g., 'ETH', 'USDC', 'BTC')",
+  //       required: true,
+  //     },
+  //     {
+  //       name: "tokenOutSymbol",
+  //       type: "string",
+  //       description: "Output token symbol (e.g., 'USDC', 'ETH', 'DAI')",
+  //       required: true,
+  //     },
+  //     {
+  //       name: "amount",
+  //       type: "string",
+  //       description:
+  //         "Amount of input token to swap (in token units, e.g., '1.0' for 1 token)",
+  //       required: true,
+  //     },
+  //     {
+  //       name: "platform",
+  //       type: "string",
+  //       description: "Blockchain platform (default: 'ethereum')",
+  //       required: false,
+  //     },
+  //     {
+  //       name: "slippageTolerance",
+  //       type: "number",
+  //       description:
+  //         "Slippage tolerance in bips (e.g., 50 = 0.5%, 100 = 1%). Default: 50",
+  //       required: false,
+  //     },
+  //   ],
+  //   handler: handleExecuteKyberSwapBySymbol,
+  // });
 
   // const testSwap = async () => {
   //   const result = await handleExecuteKyberSwapBySymbol({
-  //     tokenOutSymbol: "GRAY",
+  //     tokenOutSymbol: "MATIC",
   //     tokenInSymbol: "USDC",
-  //     amount: "3",
+  //     amount: "2",
   //     slippageTolerance: 50,
   //     platform: "ethereum",
   //   });
-  //
+
   //   console.log(result);
   // };
 
