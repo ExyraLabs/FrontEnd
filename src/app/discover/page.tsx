@@ -55,7 +55,7 @@ const AGENT_CARDS = [
     ],
     prompts: [
       // "Swap 10 USDC to ETH",
-      "Swap $4 worth of ETH for SKYOPS -Uniswap",
+      "Swap $4 worth of ETH for MATIC -Uniswap",
       "Swap 0.0002ETH to USDT -Uniswap",
     ],
     chains: ["Ethereum"],
