@@ -285,7 +285,7 @@ const Explore = () => {
         <p className="text-[#eee6e6] my-6">
           Earn Exyra Stones by completing tasks: social connections, chatting
           with the agent, and on-chain DeFi actions. Stones determine your tier
-          & future reward share.
+          & future reward share. (Coming Soon)
         </p>
         <div className="flex flex-wrap gap-4 mb-6">
           <div className="bg-[#262727] rounded-2xl p-4 flex flex-col min-w-[160px]">
@@ -473,6 +473,7 @@ const Explore = () => {
             Clear Filters
           </button>
         </div> */}
+        {/* Social Tasks */}
         <section className="mt-4 max-w-[70%]">
           <h5 className="font-semibold text-[#F5F7F7] mb-2">Social Tasks</h5>
           <div className="flex flex-wrap gap-4">
@@ -480,64 +481,64 @@ const Explore = () => {
               <TaskCard
                 key={task.id}
                 task={task}
-                onClaim={() => {
-                  dispatch(claimTask({ taskId: task.id }));
-                  dispatch(saveRewardsToDb());
-                  toast.success("Reward claimed");
-                }}
-                onActivate={() => {
-                  const phase = task.socialPhase;
-                  if (!phase || !task.socialPlatform) return;
-                  if (phase === "engage") {
-                    if (task.socialPlatform === "x") {
-                      window.open("https://x.com/ExyraLabs", "_blank");
-                      handleSocialConnected("x", "engage");
-                      toast.success("Engagement recorded");
-                    } else if (task.socialPlatform === "discord") {
-                      toast.loading("Validating Discord membership...", {
-                        id: "discord-engage",
-                      });
-                      verifyDiscordMembership().then((exists) => {
-                        if (exists) {
-                          toast.success("Discord membership verified", {
-                            id: "discord-engage",
-                          });
-                          handleSocialConnected("discord", "engage");
-                        } else {
-                          toast.dismiss("discord-engage");
-                          window.open(DISCORD_INVITE_URL, "_blank");
-                          toast(
-                            "Join the Discord, then click again to verify."
-                          );
-                        }
-                      });
-                    } else if (task.socialPlatform === "telegram") {
-                      toast.loading("Validating Telegram membership...", {
-                        id: "telegram-engage",
-                      });
-                      verifyTelegramMembership().then((exists) => {
-                        if (exists) {
-                          toast.success("Telegram membership verified", {
-                            id: "telegram-engage",
-                          });
-                          handleSocialConnected("telegram", "engage");
-                        } else {
-                          toast.dismiss("telegram-engage");
-                          window.open(TELEGRAM_INVITE_URL, "_blank");
-                          toast(
-                            "Join the Telegram, then click again to verify."
-                          );
-                        }
-                      });
-                    }
-                  } else if (phase === "connect") {
-                    if (task.socialPlatform === "x") startTwitterConnect();
-                    else if (task.socialPlatform === "discord")
-                      startDiscordConnect();
-                    else if (task.socialPlatform === "telegram")
-                      startTelegramConnect();
-                  }
-                }}
+                // onClaim={() => {
+                //   dispatch(claimTask({ taskId: task.id }));
+                //   dispatch(saveRewardsToDb());
+                //   toast.success("Reward claimed");
+                // }}
+                // onActivate={() => {
+                //   const phase = task.socialPhase;
+                //   if (!phase || !task.socialPlatform) return;
+                //   if (phase === "engage") {
+                //     if (task.socialPlatform === "x") {
+                //       window.open("https://x.com/ExyraLabs", "_blank");
+                //       handleSocialConnected("x", "engage");
+                //       toast.success("Engagement recorded");
+                //     } else if (task.socialPlatform === "discord") {
+                //       toast.loading("Validating Discord membership...", {
+                //         id: "discord-engage",
+                //       });
+                //       verifyDiscordMembership().then((exists) => {
+                //         if (exists) {
+                //           toast.success("Discord membership verified", {
+                //             id: "discord-engage",
+                //           });
+                //           handleSocialConnected("discord", "engage");
+                //         } else {
+                //           toast.dismiss("discord-engage");
+                //           window.open(DISCORD_INVITE_URL, "_blank");
+                //           toast(
+                //             "Join the Discord, then click again to verify."
+                //           );
+                //         }
+                //       });
+                //     } else if (task.socialPlatform === "telegram") {
+                //       toast.loading("Validating Telegram membership...", {
+                //         id: "telegram-engage",
+                //       });
+                //       verifyTelegramMembership().then((exists) => {
+                //         if (exists) {
+                //           toast.success("Telegram membership verified", {
+                //             id: "telegram-engage",
+                //           });
+                //           handleSocialConnected("telegram", "engage");
+                //         } else {
+                //           toast.dismiss("telegram-engage");
+                //           window.open(TELEGRAM_INVITE_URL, "_blank");
+                //           toast(
+                //             "Join the Telegram, then click again to verify."
+                //           );
+                //         }
+                //       });
+                //     }
+                //   } else if (phase === "connect") {
+                //     if (task.socialPlatform === "x") startTwitterConnect();
+                //     else if (task.socialPlatform === "discord")
+                //       startDiscordConnect();
+                //     else if (task.socialPlatform === "telegram")
+                //       startTelegramConnect();
+                //   }
+                // }}
               />
             ))}
             {socialTasks.length === 0 && (
@@ -545,6 +546,7 @@ const Explore = () => {
             )}
           </div>
         </section>
+        {/* Defi Tasks */}
         <section className="mt-6 max-w-[70%] pb-6   ">
           <h5 className="font-semibold text-[#F5F7F7] mb-2">
             Chat & DeFi Tasks
@@ -554,10 +556,10 @@ const Explore = () => {
               <TaskCard
                 key={task.id}
                 task={task}
-                onClaim={() => {
-                  dispatch(claimTask({ taskId: task.id }));
-                  dispatch(saveRewardsToDb());
-                }}
+                // onClaim={() => {
+                //   dispatch(claimTask({ taskId: task.id }));
+                //   dispatch(saveRewardsToDb());
+                // }}
               />
             ))}
             {agentTasks.length === 0 && (
@@ -610,7 +612,7 @@ interface TaskCardProps {
     completed?: boolean;
     target?: number;
   };
-  onClaim: () => void;
+  onClaim?: () => void;
   onActivate?: () => void; // click to perform action (social connect/engage)
 }
 const TaskCard = ({ task, onClaim, onActivate }: TaskCardProps) => {
@@ -621,7 +623,7 @@ const TaskCard = ({ task, onClaim, onActivate }: TaskCardProps) => {
     : undefined;
   return (
     <div
-      className="w-[180px] relative h-[170px] rounded-2xl bg-[#262727] p-3 flex flex-col justify-between hover:bg-[#303131] transition-colors cursor-pointer"
+      className="w-[180px] relative h-[170px] rounded-2xl bg-[#262727] p-3 flex flex-col justify-between hover:bg-[#303131] transition-colors"
       onClick={() => {
         if (!claimable && onActivate) onActivate();
       }}
