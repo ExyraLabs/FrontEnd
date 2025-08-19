@@ -7,6 +7,7 @@ import axios from "axios";
 import { getContractAddressWithDecimals } from "@/lib/coingecko";
 import SlippageSelector from "@/components/SlippageSelector";
 import { useRewardIntegrations } from "@/hooks/useRewardIntegrations";
+import { logUserAction } from "@/actions/statistics";
 
 // KyberSwap Aggregator API configuration
 const KYBERSWAP_API_BASE = "https://aggregator-api.kyberswap.com";
@@ -344,6 +345,30 @@ const Knc = () => {
         })),
       };
 
+      // Log quote request to statistics
+      if (address) {
+        try {
+          await logUserAction({
+            address,
+            agent: "KyberSwap",
+            action: "quote",
+            volume: parseFloat(amount),
+            token: tokenInSymbol,
+            volumeUsd: parseFloat(routeSummary.amountInUsd || "0"),
+            extra: {
+              tokenOut: tokenOutSymbol,
+              platform,
+              effectiveRate,
+              gasUsd: routeSummary.gasUsd,
+              routeID: routeSummary.routeID,
+            },
+          });
+          console.log("✅ Quote action logged to statistics");
+        } catch (statsError) {
+          console.warn("Failed to log quote statistics:", statsError);
+        }
+      }
+
       return [
         header,
         usdLine,
@@ -591,6 +616,30 @@ const Knc = () => {
       } catch (e) {
         console.warn("Failed to mark swap task complete:", e);
       }
+
+      // Log swap action to statistics
+      try {
+        await logUserAction({
+          address: address!,
+          agent: "KyberSwap",
+          action: "swap",
+          volume: parseFloat(amount),
+          token: tokenInSymbol,
+          volumeUsd: parseFloat(routeData.routeSummary.amountInUsd || "0"),
+          extra: {
+            tokenOut: tokenOutSymbol,
+            platform,
+            slippageTolerance,
+            txHash: executeSwapTxReceipt?.transactionHash || executeSwapTx.hash,
+            amountOut: routeData.routeSummary.amountOut,
+            amountOutUsd: routeData.routeSummary.amountOutUsd,
+          },
+        });
+        console.log("✅ Swap action logged to statistics");
+      } catch (statsError) {
+        console.warn("Failed to log swap statistics:", statsError);
+      }
+
       console.log(
         `Swap tx executed with hash: ${executeSwapTxReceipt?.blockHash}`
       );

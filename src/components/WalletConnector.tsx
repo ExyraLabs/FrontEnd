@@ -4,6 +4,7 @@ import Image from "next/image";
 import React, { useState } from "react";
 import WalletManagementModal from "./WalletManagementModal";
 import { useWalletAssets } from "../hooks/useWalletAssets";
+import { useUserLogin } from "../hooks/useUserLogin";
 
 const WalletConnector = () => {
   const [selectedLanguage, setSelectedLanguage] = useState("Eng");
@@ -14,6 +15,9 @@ const WalletConnector = () => {
 
   // Use the custom hook to fetch real wallet assets
   const { assets, totalBalance, loading, error } = useWalletAssets();
+
+  // Use the login hook to track wallet connections
+  useUserLogin();
 
   // console.log(assets, "assets");
   // Close modals when clicking outside
