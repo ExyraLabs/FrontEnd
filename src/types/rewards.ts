@@ -19,7 +19,8 @@ export interface RewardTask {
     | "stake"
     | "swap"
     | "bridge"
-    | "provide-lp";
+    | "provide-lp"
+    | "lend";
   claimed?: boolean; // whether user claimed points (if claim step separate)
   completed?: boolean; // derived
   tierUnlock?: string; // optional badge name unlocked

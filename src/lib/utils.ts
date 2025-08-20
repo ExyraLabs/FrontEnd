@@ -20,6 +20,7 @@ import {
 import { ethers } from "ethers";
 import { ERC20_ABI } from "../constants/swap";
 import { JSBI } from "@uniswap/sdk";
+import { Reserve } from "@aave/react";
 
 // Type for window.ethereum
 // declare global {
@@ -556,3 +557,97 @@ export function fromReadableAmount(amount: number, decimals: number): JSBI {
     JSBI.BigInt(extraDigits)
   );
 }
+
+// Types based on actual Aave GraphQL response
+type BigDecimal = string | number;
+type PercentValue = {
+  value: string;
+  formatted: string;
+  decimals: number;
+  raw: string;
+};
+
+export interface ExtendedReserve extends Reserve {
+  type: "supply" | "borrow";
+  marketName: string;
+}
+
+export const toBigDecimalNumber = (value: BigDecimal): number => {
+  if (value === undefined || value === null) return 0;
+  if (typeof value === "string") {
+    const parsed = parseFloat(value);
+    return isNaN(parsed) ? 0 : parsed;
+  }
+  const num = Number(value);
+  return isNaN(num) ? 0 : num;
+};
+
+export const formatNumber = (
+  value: BigDecimal | undefined | null | Record<string, unknown>
+): string => {
+  if (value === undefined || value === null) return "N/A";
+
+  // Handle DecimalValue object (like supplyInfo.total)
+  if (typeof value === "object" && value !== null && "value" in value) {
+    const num = toBigDecimalNumber(value.value as BigDecimal);
+    if (isNaN(num) || num === 0) return "N/A";
+    if (num >= 1e9) return `${(num / 1e9).toFixed(2)}B`;
+    if (num >= 1e6) return `${(num / 1e6).toFixed(2)}M`;
+    if (num >= 1e3) return `${(num / 1e3).toFixed(2)}K`;
+    return `${num.toFixed(2)}`;
+  }
+
+  // Handle TokenAmount object (like borrowInfo.total) - use usd property
+  if (typeof value === "object" && value !== null && "usd" in value) {
+    const num = toBigDecimalNumber(value.usd as BigDecimal);
+    if (isNaN(num) || num === 0) return "N/A";
+    if (num >= 1e9) return `${(num / 1e9).toFixed(2)}B`;
+    if (num >= 1e6) return `${(num / 1e6).toFixed(2)}M`;
+    if (num >= 1e3) return `${(num / 1e3).toFixed(2)}K`;
+    return `${num.toFixed(2)}`;
+  }
+
+  // Handle TokenAmount object - use amount property as fallback
+  if (typeof value === "object" && value !== null && "amount" in value) {
+    const num = toBigDecimalNumber(value.amount as BigDecimal);
+    if (isNaN(num) || num === 0) return "N/A";
+    if (num >= 1e9) return `${(num / 1e9).toFixed(2)}B`;
+    if (num >= 1e6) return `${(num / 1e6).toFixed(2)}M`;
+    if (num >= 1e3) return `${(num / 1e3).toFixed(2)}K`;
+    return `${num.toFixed(2)}`;
+  }
+
+  const num = toBigDecimalNumber(value as BigDecimal);
+  if (isNaN(num) || num === 0) return "N/A";
+  if (num >= 1e9) return `${(num / 1e9).toFixed(2)}B`;
+  if (num >= 1e6) return `${(num / 1e6).toFixed(2)}M`;
+  if (num >= 1e3) return `${(num / 1e3).toFixed(2)}K`;
+  return `${num.toFixed(2)}`;
+};
+
+export const formatPercentage = (
+  value: PercentValue | string | number | undefined
+): string => {
+  if (value === null || value === undefined) return "N/A";
+
+  // Handle object with value property (PercentValue type)
+  if (typeof value === "object" && value !== null && "value" in value) {
+    const numericValue = parseFloat(value.value);
+    // Convert from decimal to percentage (multiply by 100)
+    const percentageValue = numericValue * 100;
+    return `${percentageValue.toFixed(2)}%`;
+  }
+
+  // Handle string/number (assuming these are already in percentage format)
+  const numericValue =
+    typeof value === "string" ? parseFloat(value) : Number(value);
+  if (isNaN(numericValue)) return "N/A";
+
+  return `${numericValue.toFixed(2)}%`;
+};
+
+export const formatCurrency = (
+  value: BigDecimal | string | number | undefined
+): string => {
+  return formatNumber(value as BigDecimal);
+};

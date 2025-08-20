@@ -139,6 +139,17 @@ const baseTasks: RewardTask[] = [
     actionType: "stake",
   },
   {
+    id: "defi-first-lend",
+    title: "Lend tokens",
+    description: "Supply tokens to a lending protocol to earn interest.",
+    category: "defi",
+    points: 180,
+    maxCompletions: 1,
+    progress: 0,
+    target: 1,
+    actionType: "lend",
+  },
+  {
     id: "referral-invite",
     title: "Refer a friend",
     description: "Invite a friend who completes at least one action.",

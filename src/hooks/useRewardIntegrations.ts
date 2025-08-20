@@ -49,7 +49,7 @@ export const useRewardIntegrations = (wallet?: string | null) => {
   );
 
   const handleDefiAction = useCallback(
-    async (actionType: "swap" | "stake" | "bridge" | "provide-lp") => {
+    async (actionType: "swap" | "stake" | "bridge" | "provide-lp" | "lend") => {
       dispatch(completeDefiAction({ actionType }));
       dispatch(saveRewardsToDb());
     },

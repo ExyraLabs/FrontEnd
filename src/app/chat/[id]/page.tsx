@@ -43,6 +43,7 @@ import {
 } from "@/store/rewardsSlice";
 import Uniswap from "@/agents/Uniswap";
 import { withdraw } from "viem/zksync";
+import Aave from "@/agents/Aave";
 
 const Lido = dynamic(() => import("@/agents/Lido"), {
   ssr: false,
@@ -212,6 +213,7 @@ const Page = () => {
       swapTokens: "/icons/uniswap.png",
       getUniswapQuote: "/icons/uniswap.png",
       executeSwap: "/icons/uniswap.png",
+      WrapETH: "/icons/uniswap.png",
 
       // Lido tools
       getLidoContractAddress: "/icons/Lido.png",
@@ -808,6 +810,7 @@ const Page = () => {
       <Lido />
       <Knc />
       <AlchemyAgent />
+      <Aave />
       {/* <Curve /> */}
     </div>
   );

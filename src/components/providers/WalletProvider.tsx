@@ -9,6 +9,9 @@ import { Session } from "next-auth";
 import { SessionProvider } from "next-auth/react";
 import { type ReactNode } from "react";
 import { cookieToInitialState, WagmiProvider, type Config } from "wagmi";
+import { AaveClient, AaveProvider } from "@aave/react";
+
+const client = AaveClient.create();
 
 // Set up queryClient
 const queryClient = new QueryClient();
@@ -67,7 +70,9 @@ function WalletProvider({
         initialState={initialState}
       >
         <QueryClientProvider client={queryClient}>
-          <CopilotKit runtimeUrl={runtimeUrl}>{children}</CopilotKit>
+          <CopilotKit runtimeUrl={runtimeUrl}>
+            <AaveProvider client={client}>{children}</AaveProvider>
+          </CopilotKit>
         </QueryClientProvider>
       </WagmiProvider>
     </SessionProvider>

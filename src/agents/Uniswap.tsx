@@ -10,7 +10,10 @@ import {
   ChainId,
 } from "@uniswap/sdk";
 import { ROUTER_ABI_V2, ROUTER_ADDRESS_V2 } from "@/constants/swap";
-import { useCopilotAction } from "@copilotkit/react-core";
+import {
+  useCopilotAction,
+  useCopilotAdditionalInstructions,
+} from "@copilotkit/react-core";
 import { useAppKitAccount } from "@reown/appkit/react";
 import { ethers } from "ethers";
 import { getContractAddressWithDecimals } from "@/lib/coingecko";
@@ -24,6 +27,11 @@ const Uniswap = () => {
   const QUICKNODE_HTTP_ENDPOINT =
     "https://wiser-billowing-diagram.quiknode.pro/7b5999ec873d704e376e88b7464a49ff0924414c/";
   const provider = ethers.providers.getDefaultProvider(QUICKNODE_HTTP_ENDPOINT);
+
+  useCopilotAdditionalInstructions({
+    instructions:
+      "Make sure to use the WrapETH function for wrapping ETH to WETH",
+  });
 
   // Function to get Uniswap quote without executing the swap
   const handleGetUniswapQuote = async ({
@@ -133,29 +141,6 @@ const Uniswap = () => {
       // Calculate effective rate
       const effectiveRate = Number(outputAmount) / Number(inputAmount || "1");
       const priceImpact = trade.priceImpact.toFixed(4);
-
-      // Log quote request to statistics
-      if (address) {
-        try {
-          await logUserAction({
-            address,
-            agent: "Uniswap",
-            action: "quote",
-            volume: parseFloat(amount),
-            token: tokenInSymbol,
-            extra: {
-              tokenOut: tokenOutSymbol,
-              platform,
-              effectiveRate,
-              priceImpact,
-              slippage,
-            },
-          });
-          console.log("✅ Quote action logged to statistics");
-        } catch (statsError) {
-          console.warn("Failed to log quote statistics:", statsError);
-        }
-      }
 
       // Build readable summary
       const header = `💱 Uniswap V2 Quote: ${Number(inputAmount).toLocaleString(
@@ -758,21 +743,369 @@ const Uniswap = () => {
     },
   });
 
-  // Test function commented out to prevent accidental execution
-  const handleTest = async () => {
-    const swapResult = await handleSwapTokens({
-      tokenInSymbol: "USDC",
-      tokenOutSymbol: "AAVE",
-      amount: "1",
-      platform: "ethereum",
-      slippage: "50", // 0.5% slippage
-    });
-    console.log("✅ Swap result:", swapResult);
+  // Function to wrap ETH to WETH
+  const handleWrapETH = async ({ amount }: { amount: string }) => {
+    if (!isConnected || !address) {
+      throw new Error("Wallet not connected");
+    }
+
+    try {
+      console.log(`🔍 Step 1: Preparing to wrap ${amount} ETH to WETH...`);
+
+      // WETH contract address (same as in constants/swap.ts)
+      const WETH_ADDRESS = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
+
+      // WETH contract ABI - we only need the deposit function
+      const WETH_ABI = [
+        "function deposit() payable",
+        "function withdraw(uint256 amount)",
+        "function balanceOf(address account) view returns (uint256)",
+        "function transfer(address to, uint256 amount) returns (bool)",
+        "function symbol() view returns (string)",
+        "function decimals() view returns (uint8)",
+      ];
+
+      // Convert amount to wei
+      const amountInWei = ethers.utils.parseEther(amount.toString());
+
+      console.log(`🔍 Step 2: Getting wallet signer...`);
+
+      // Get signer for transaction execution
+      const { getSigner } = await import("@/lib/utils");
+      const signer = await getSigner(address);
+
+      if (!signer) {
+        throw new Error(
+          "Unable to get wallet signer. Please ensure your wallet is connected."
+        );
+      }
+
+      // Check ETH balance before wrapping
+      const ethBalance = await signer.getBalance();
+      console.log(
+        `🔎 Current ETH balance: ${ethers.utils.formatEther(ethBalance)} ETH`
+      );
+
+      if (ethBalance.lt(amountInWei)) {
+        throw new Error(
+          `❌ Insufficient ETH balance. Needed ${amount} ETH, have ${ethers.utils.formatEther(
+            ethBalance
+          )} ETH.`
+        );
+      }
+
+      console.log(`🔍 Step 3: Creating WETH contract instance...`);
+
+      // Create WETH contract instance
+      const wethContract = new ethers.Contract(WETH_ADDRESS, WETH_ABI, signer);
+
+      // Get current WETH balance for comparison
+      const currentWethBalance = await wethContract.balanceOf(address);
+      console.log(
+        `🔎 Current WETH balance: ${ethers.utils.formatEther(
+          currentWethBalance
+        )} WETH`
+      );
+
+      console.log(`🚀 Step 4: Executing wrap transaction...`);
+
+      // Execute the deposit (wrap) transaction
+      const wrapTx = await wethContract.deposit({
+        value: amountInWei,
+      });
+
+      console.log(`Wrap transaction submitted with hash: ${wrapTx.hash}`);
+
+      // Wait for confirmation
+      const wrapReceipt = await wrapTx.wait();
+
+      // Get new WETH balance
+      const newWethBalance = await wethContract.balanceOf(address);
+      const wethReceived = newWethBalance.sub(currentWethBalance);
+
+      console.log(
+        `✅ Wrap completed successfully! Block: ${wrapReceipt.blockNumber}`
+      );
+      console.log(
+        `🎉 Received: ${ethers.utils.formatEther(wethReceived)} WETH`
+      );
+
+      // Mark DeFi swap task as completed (wrap is a type of swap)
+      try {
+        await handleDefiAction("swap");
+      } catch (e) {
+        console.warn("Failed to mark swap task complete:", e);
+      }
+
+      // Log wrap action to statistics
+      if (address) {
+        try {
+          await logUserAction({
+            address,
+            agent: "Uniswap",
+            action: "wrap",
+            volume: parseFloat(amount),
+            token: "ETH",
+            volumeUsd: 0, // Would need price data to calculate USD value
+            extra: {
+              wethReceived: ethers.utils.formatEther(wethReceived),
+              txHash: wrapReceipt.transactionHash,
+            },
+          });
+          console.log("✅ Wrap action logged to statistics");
+        } catch (statsError) {
+          console.warn("Failed to log wrap statistics:", statsError);
+        }
+      }
+
+      return {
+        success: true,
+        message: `✅ Successfully wrapped ${amount} ETH to ${ethers.utils.formatEther(
+          wethReceived
+        )} WETH! Transaction hash: ${wrapReceipt.transactionHash}`,
+        txHash: wrapReceipt.transactionHash,
+        wethReceived: ethers.utils.formatEther(wethReceived),
+      };
+    } catch (error) {
+      console.error("ETH wrap error:", error);
+
+      if (error instanceof Error) {
+        // Handle specific error types
+        if (/insufficient funds|insufficient balance/i.test(error.message)) {
+          return {
+            success: false,
+            error: `❌ Insufficient ETH balance. Please check your balance and try again.`,
+          };
+        }
+
+        if (/user denied transaction/i.test(error.message)) {
+          return {
+            success: false,
+            error: "❌ Transaction cancelled by user.",
+          };
+        }
+
+        if (/execution reverted/i.test(error.message)) {
+          return {
+            success: false,
+            error: `❌ Transaction failed: ${error.message}\n\n💡 Try:\n  • Check your ETH balance\n  • Ensure you have enough ETH for gas fees\n  • Try a smaller amount`,
+          };
+        }
+      }
+
+      return {
+        success: false,
+        error:
+          error instanceof Error ? error.message : "Unknown error occurred",
+      };
+    }
   };
 
+  // Function to unwrap WETH back to ETH
+  const handleUnwrapWETH = async ({ amount }: { amount: string }) => {
+    if (!isConnected || !address) {
+      throw new Error("Wallet not connected");
+    }
+
+    try {
+      console.log(`🔍 Step 1: Preparing to unwrap ${amount} WETH to ETH...`);
+
+      // WETH contract address
+      const WETH_ADDRESS = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
+
+      // WETH contract ABI
+      const WETH_ABI = [
+        "function deposit() payable",
+        "function withdraw(uint256 amount)",
+        "function balanceOf(address account) view returns (uint256)",
+        "function transfer(address to, uint256 amount) returns (bool)",
+        "function symbol() view returns (string)",
+        "function decimals() view returns (uint8)",
+      ];
+
+      // Convert amount to wei
+      const amountInWei = ethers.utils.parseEther(amount.toString());
+
+      console.log(`🔍 Step 2: Getting wallet signer...`);
+
+      // Get signer for transaction execution
+      const { getSigner } = await import("@/lib/utils");
+      const signer = await getSigner(address);
+
+      if (!signer) {
+        throw new Error(
+          "Unable to get wallet signer. Please ensure your wallet is connected."
+        );
+      }
+
+      console.log(`🔍 Step 3: Creating WETH contract instance...`);
+
+      // Create WETH contract instance
+      const wethContract = new ethers.Contract(WETH_ADDRESS, WETH_ABI, signer);
+
+      // Check WETH balance before unwrapping
+      const wethBalance = await wethContract.balanceOf(address);
+      console.log(
+        `🔎 Current WETH balance: ${ethers.utils.formatEther(wethBalance)} WETH`
+      );
+
+      if (wethBalance.lt(amountInWei)) {
+        throw new Error(
+          `❌ Insufficient WETH balance. Needed ${amount} WETH, have ${ethers.utils.formatEther(
+            wethBalance
+          )} WETH.`
+        );
+      }
+
+      // Get current ETH balance for comparison
+      const currentEthBalance = await signer.getBalance();
+      console.log(
+        `🔎 Current ETH balance: ${ethers.utils.formatEther(
+          currentEthBalance
+        )} ETH`
+      );
+
+      console.log(`🚀 Step 4: Executing unwrap transaction...`);
+
+      // Execute the withdraw (unwrap) transaction
+      const unwrapTx = await wethContract.withdraw(amountInWei);
+
+      console.log(`Unwrap transaction submitted with hash: ${unwrapTx.hash}`);
+
+      // Wait for confirmation
+      const unwrapReceipt = await unwrapTx.wait();
+
+      // Get new ETH balance (account for gas fees)
+      const newEthBalance = await signer.getBalance();
+      const ethReceived = newEthBalance.sub(currentEthBalance);
+
+      console.log(
+        `✅ Unwrap completed successfully! Block: ${unwrapReceipt.blockNumber}`
+      );
+      console.log(
+        `🎉 Received approximately: ${ethers.utils.formatEther(
+          ethReceived
+        )} ETH (minus gas fees)`
+      );
+
+      // Mark DeFi swap task as completed (unwrap is a type of swap)
+      try {
+        await handleDefiAction("swap");
+      } catch (e) {
+        console.warn("Failed to mark swap task complete:", e);
+      }
+
+      // Log unwrap action to statistics
+      if (address) {
+        try {
+          await logUserAction({
+            address,
+            agent: "Uniswap",
+            action: "unwrap",
+            volume: parseFloat(amount),
+            token: "WETH",
+            volumeUsd: 0, // Would need price data to calculate USD value
+            extra: {
+              ethReceived: ethers.utils.formatEther(ethReceived),
+              txHash: unwrapReceipt.transactionHash,
+            },
+          });
+          console.log("✅ Unwrap action logged to statistics");
+        } catch (statsError) {
+          console.warn("Failed to log unwrap statistics:", statsError);
+        }
+      }
+
+      return {
+        success: true,
+        message: `✅ Successfully unwrapped ${amount} WETH to ETH! Transaction hash: ${unwrapReceipt.transactionHash}`,
+        txHash: unwrapReceipt.transactionHash,
+        ethReceived: ethers.utils.formatEther(ethReceived),
+      };
+    } catch (error) {
+      console.error("WETH unwrap error:", error);
+
+      if (error instanceof Error) {
+        // Handle specific error types
+        if (/insufficient funds|insufficient balance/i.test(error.message)) {
+          return {
+            success: false,
+            error: `❌ Insufficient WETH balance. Please check your balance and try again.`,
+          };
+        }
+
+        if (/user denied transaction/i.test(error.message)) {
+          return {
+            success: false,
+            error: "❌ Transaction cancelled by user.",
+          };
+        }
+
+        if (/execution reverted/i.test(error.message)) {
+          return {
+            success: false,
+            error: `❌ Transaction failed: ${error.message}\n\n💡 Try:\n  • Check your WETH balance\n  • Ensure you have enough ETH for gas fees\n  • Try a smaller amount`,
+          };
+        }
+      }
+
+      return {
+        success: false,
+        error:
+          error instanceof Error ? error.message : "Unknown error occurred",
+      };
+    }
+  };
+
+  // Copilot action for wrapping ETH to WETH
+  useCopilotAction({
+    name: "WrapETH",
+    description:
+      "Wrap native ETH into WETH (Wrapped Ether) using the WETH deposit function. This is useful for DeFi interactions that require ERC20 tokens instead of native ETH.",
+    parameters: [
+      {
+        name: "amount",
+        type: "string",
+        description: "The amount of ETH to wrap (e.g., '1.0' for 1 ETH)",
+        required: true,
+      },
+    ],
+    handler: async (args: { amount: string }) => {
+      const result = await handleWrapETH(args);
+      if (result.success) {
+        return result.message;
+      } else {
+        return result.error || "Wrap failed";
+      }
+    },
+  });
+
+  // Copilot action for unwrapping WETH back to ETH
+  useCopilotAction({
+    name: "unwrapWETH",
+    description:
+      "Unwrap WETH (Wrapped Ether) back to native ETH using the WETH withdraw function. This converts your ERC20 WETH tokens back to native ETH.",
+    parameters: [
+      {
+        name: "amount",
+        type: "string",
+        description: "The amount of WETH to unwrap (e.g., '1.0' for 1 WETH)",
+        required: true,
+      },
+    ],
+    handler: async (args: { amount: string }) => {
+      const result = await handleUnwrapWETH(args);
+      if (result.success) {
+        return result.message;
+      } else {
+        return result.error || "Unwrap failed";
+      }
+    },
+  });
+
   return (
-    <button onClick={handleTest}>Test Swap</button>
-    // null
+    // <button onClick={handleTest}>Test Swap</button>
+    null
   );
 };
 
