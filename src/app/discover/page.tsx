@@ -38,7 +38,7 @@ const AGENT_CARDS = [
     ],
     prompts: [
       // "How can I stake my ETH?",
-      "Withdraw all Lido stETH in my wallet -Lido.",
+      "Withdraw all Lido stETH in my wallet - Lido.",
       "Stake $4 worth of ETH for me.",
     ],
     chains: ["Ethereum"],
@@ -55,8 +55,8 @@ const AGENT_CARDS = [
     ],
     prompts: [
       // "Swap 10 USDC to ETH",
-      "Swap $4 worth of ETH for MATIC -Uniswap",
-      "Swap 0.0002ETH to USDT -Uniswap",
+      "Swap $4 worth of ETH for MATIC - Uniswap.",
+      "Swap 0.0002ETH to USDT - Uniswap.",
     ],
     chains: ["Ethereum"],
   },
@@ -73,7 +73,7 @@ const AGENT_CARDS = [
     prompts: [
       // "Swap 5 BNB to USDT on BSC",
       "Show KyberSwap rates for ETH/USDT",
-      "Swap 0.001 ETH to USDT on Ethereum -KyberSwap",
+      "Swap 0.001 ETH to USDT on Ethereum - KyberSwap.",
     ],
     chains: ["Ethereum"],
   },
