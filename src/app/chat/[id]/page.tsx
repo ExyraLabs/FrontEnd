@@ -256,6 +256,9 @@ const Page = () => {
       getAccountBalance: "/icons/alchemy.svg",
 
       // Add more tool mappings as needed
+      //Aave Tools
+      Lend: "/icons/aave.svg",
+      FindingReserves: "/icons/aave.svg",
     };
 
     return toolIconMapping[toolName] || null;

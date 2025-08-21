@@ -221,8 +221,8 @@ export default function UserStatsDemo() {
   }
 
   return (
-    <div className="overflow-y-auto scrollbar-hide bg-gradient-to-br from-[#0F0F23] to-[#1A1A2E] p-4 lg:p-8">
-      <div className="max-w-7xl mx-auto">
+    <div className="overflow-y-auto mr-7 rounded-md scrollbar-hide bg-gradient-to-br from-[#0F0F23] to-[#1A1A2E] p-4 lg:p-8">
+      <div className="max-w-7xl  mx-auto">
         {/* Header */}
         <div className="bg-[#1A1A1A]/80 backdrop-blur-sm border border-[#A9A0FF]/20 rounded-[24px] p-6 mb-6">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">

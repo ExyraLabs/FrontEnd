@@ -60,7 +60,7 @@ const getFallbackPrice = (tokenSymbol: string): number => {
   };
 
   const price = fallbackPrices[tokenSymbol.toUpperCase()] || 1.0;
-  console.log(`Using fallback price for ${tokenSymbol}: $${price}`);
+  // console.log(`Using fallback price for ${tokenSymbol}: $${price}`);
   return price;
 };
 
@@ -72,7 +72,7 @@ const getTokenPriceAndImage = async (
   image?: string;
 }> => {
   try {
-    console.log(`Fetching price and image for ${tokenSymbol}`);
+    // console.log(`Fetching price and image for ${tokenSymbol}`);
 
     // Direct mapping to avoid bridged tokens and ensure we get the main token
     const directMappings: Record<string, string> = {
@@ -94,14 +94,14 @@ const getTokenPriceAndImage = async (
     // First try direct mapping for common tokens
     const directId = directMappings[tokenSymbol.toUpperCase()];
     if (directId) {
-      console.log(`Using direct mapping for ${tokenSymbol}: ${directId}`);
+      // console.log(`Using direct mapping for ${tokenSymbol}: ${directId}`);
       const [priceData, coinDetails] = await Promise.all([
         fetchTokenPrice(directId),
         fetchCoinDetails(directId).catch(() => null),
       ]);
 
       if (priceData && priceData.price) {
-        console.log(`Price for ${tokenSymbol}: $${priceData.price}`);
+        // console.log(`Price for ${tokenSymbol}: $${priceData.price}`);
         const imageUrl = coinDetails?.image?.small || coinDetails?.image?.thumb;
         return {
           price: priceData.price,
@@ -127,7 +127,7 @@ const getTokenPriceAndImage = async (
       const selectedCoin = mainCoins.length > 0 ? mainCoins[0] : coins[0];
       const tokenId = selectedCoin.id;
 
-      console.log(`Found CoinGecko ID for ${tokenSymbol}: ${tokenId}`);
+      // console.log(`Found CoinGecko ID for ${tokenSymbol}: ${tokenId}`);
 
       const [priceData, coinDetails] = await Promise.all([
         fetchTokenPrice(tokenId),
@@ -135,7 +135,7 @@ const getTokenPriceAndImage = async (
       ]);
 
       if (priceData && priceData.price) {
-        console.log(`Price for ${tokenSymbol}: $${priceData.price}`);
+        // console.log(`Price for ${tokenSymbol}: $${priceData.price}`);
         const imageUrl = coinDetails?.image?.small || coinDetails?.image?.thumb;
         return {
           price: priceData.price,

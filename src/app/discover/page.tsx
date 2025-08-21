@@ -158,19 +158,22 @@ const AGENT_CARDS = [
   //   ],
   //   chains: ["Ethereum", "Arbitrum", "Optimism", "Base"],
   // },
-  // {
-  //   icon: "/icons/lend.svg",
-  //   title: "Aave Protocol",
-  //   subtitle: "Decentralized lending and borrowing platform",
-  //   category: "Lend",
-  //   features: [
-  //     "Lend crypto assets to earn interest",
-  //     "Borrow against your collateral",
-  //     "Access flash loans",
-  //   ],
-  //   prompts: ["Lend 100 USDC on Aave", "What are the current lending rates?"],
-  //   chains: ["Ethereum", "Arbitrum", "Optimism"],
-  // },
+  {
+    icon: "/icons/aave.svg",
+    title: "Aave Protocol",
+    subtitle: "Decentralized lending and borrowing platform",
+    category: "Lend",
+    features: [
+      "Lend crypto assets to earn interest",
+      "Borrow against your collateral",
+      "Access flash loans",
+    ],
+    prompts: [
+      "Lend 0.0005 WETH on Aave",
+      "What are the current lending rates for WETH?",
+    ],
+    chains: ["Ethereum"],
+  },
 ];
 
 const Explore = () => {

@@ -12,6 +12,7 @@ import {
 import { useCopilotAction } from "@copilotkit/react-core";
 import { useRewardIntegrations } from "@/hooks/useRewardIntegrations";
 import { logUserAction } from "@/actions/statistics";
+import { getTokenUsdPrice } from "@/lib/pricing";
 
 export interface EthereumProvider {
   request(...args: unknown[]): Promise<unknown>;
@@ -79,12 +80,15 @@ const Lido = () => {
         // Log stake action to statistics
         if (address) {
           try {
+            const price = await getTokenUsdPrice("ETH");
+            const createdAt = new Date().toISOString();
             await logUserAction({
               address,
               agent: "Lido",
               action: "stake",
               volume: parseFloat(amount),
               token: "ETH",
+              volumeUsd: parseFloat(amount) * (price || 0),
               extra: {
                 stethReceived: ethers.utils.formatEther(
                   stakeTx.result.stethReceived.toString()
@@ -94,6 +98,7 @@ const Lido = () => {
                 ),
                 txHash: stakeTx.hash,
                 referralAddress,
+                createdAt,
               },
             });
             console.log("✅ Stake action logged to statistics");
@@ -203,12 +208,15 @@ const Lido = () => {
       // Log withdrawal request action to statistics
       if (address) {
         try {
+          const price = await getTokenUsdPrice(tokenParam);
+          const createdAt = new Date().toISOString();
           await logUserAction({
             address,
             agent: "Lido",
             action: "withdraw_request",
             volume: parseFloat(amount),
             token: tokenParam,
+            volumeUsd: parseFloat(amount) * (price || 0),
             extra: {
               operation: "withdrawalRequest",
               mode,
@@ -218,6 +226,7 @@ const Lido = () => {
                 typeof r.id === "bigint" ? r.id.toString() : r.id ?? r.stringId
               ),
               txHash: tx.hash,
+              createdAt,
             },
           });
           console.log("✅ Withdrawal request action logged to statistics");
@@ -329,12 +338,15 @@ const Lido = () => {
             );
           }, 0);
 
+          const price = await getTokenUsdPrice("ETH");
+          const createdAt = new Date().toISOString();
           await logUserAction({
             address,
             agent: "Lido",
             action: "withdraw_claim",
             volume: totalEthClaimed,
             token: "ETH",
+            volumeUsd: totalEthClaimed * (price || 0),
             extra: {
               operation: "withdrawalClaim",
               requestCount: claimed.length,
@@ -342,6 +354,7 @@ const Lido = () => {
                 typeof c.id === "bigint" ? c.id.toString() : c.id || c.stringId
               ),
               txHash: tx.hash,
+              createdAt,
             },
           });
           console.log("✅ Withdrawal claim action logged to statistics");
@@ -740,12 +753,15 @@ Data: ${populateResult.data}
               // Log wrap action to statistics
               if (address) {
                 try {
+                  const price = await getTokenUsdPrice("ETH");
+                  const createdAt = new Date().toISOString();
                   await logUserAction({
                     address,
                     agent: "Lido",
-                    action: "wrap",
+                    action: "wrapETHLido",
                     volume: parseFloat(amount),
                     token: "ETH",
+                    volumeUsd: parseFloat(amount) * (price || 0),
                     extra: {
                       operation: "wrapEth",
                       stethWrapped: ethers.utils.formatEther(
@@ -755,6 +771,7 @@ Data: ${populateResult.data}
                         wrapEthTx.result.wstethReceived.toString()
                       ),
                       txHash: wrapEthTx.hash,
+                      createdAt,
                     },
                   });
                   console.log("✅ Wrap ETH action logged to statistics");
@@ -802,12 +819,15 @@ Required: ${amount} stETH
               // Log wrap stETH action to statistics
               if (address) {
                 try {
+                  const price = await getTokenUsdPrice("stETH");
+                  const createdAt = new Date().toISOString();
                   await logUserAction({
                     address,
                     agent: "Lido",
                     action: "wrap",
                     volume: parseFloat(amount),
                     token: "stETH",
+                    volumeUsd: parseFloat(amount) * (price || 0),
                     extra: {
                       operation: "wrapSteth",
                       stethWrapped: ethers.utils.formatEther(
@@ -817,6 +837,7 @@ Required: ${amount} stETH
                         wrapStethTx.result.wstethReceived.toString()
                       ),
                       txHash: wrapStethTx.hash,
+                      createdAt,
                     },
                   });
                   console.log("✅ Wrap stETH action logged to statistics");
@@ -849,12 +870,15 @@ Required: ${amount} stETH
               // Log unwrap action to statistics
               if (address) {
                 try {
+                  const price = await getTokenUsdPrice("wstETH");
+                  const createdAt = new Date().toISOString();
                   await logUserAction({
                     address,
                     agent: "Lido",
                     action: "unwrap",
                     volume: parseFloat(amount),
                     token: "wstETH",
+                    volumeUsd: parseFloat(amount) * (price || 0),
                     extra: {
                       operation: "unwrap",
                       wstethUnwrapped: ethers.utils.formatEther(
@@ -864,6 +888,7 @@ Required: ${amount} stETH
                         unwrapTx.result.stethReceived.toString()
                       ),
                       txHash: unwrapTx.hash,
+                      createdAt,
                     },
                   });
                   console.log("✅ Unwrap action logged to statistics");
@@ -1196,16 +1221,20 @@ Output: ${ethers.utils.formatEther(sharesFromSteth.toString())} shares
             // Log transfer action to statistics
             if (address) {
               try {
+                const price = await getTokenUsdPrice("stETH");
+                const createdAt = new Date().toISOString();
                 await logUserAction({
                   address,
                   agent: "Lido",
                   action: "transfer",
                   volume: parseFloat(amount),
                   token: "stETH",
+                  volumeUsd: parseFloat(amount) * (price || 0),
                   extra: {
                     operation: "transferSteth",
                     toAddress,
                     txHash: transferStethTx.hash,
+                    createdAt,
                   },
                 });
                 console.log("✅ Transfer stETH action logged to statistics");
@@ -1235,16 +1264,20 @@ Output: ${ethers.utils.formatEther(sharesFromSteth.toString())} shares
             // Log transfer action to statistics
             if (address) {
               try {
+                const price = await getTokenUsdPrice("wstETH");
+                const createdAt = new Date().toISOString();
                 await logUserAction({
                   address,
                   agent: "Lido",
                   action: "transfer",
                   volume: parseFloat(amount),
                   token: "wstETH",
+                  volumeUsd: parseFloat(amount) * (price || 0),
                   extra: {
                     operation: "transferWsteth",
                     toAddress,
                     txHash: transferWstethTx.hash,
+                    createdAt,
                   },
                 });
                 console.log("✅ Transfer wstETH action logged to statistics");
@@ -1837,6 +1870,7 @@ Spender: ${toAddress}
   });
 
   // Test functions commented out to prevent accidental execution
+  /*
   const testStake = async () => {
     const stakeResult = await handleStakeETH({
       amount: "0.001", // 0.01 ETH
@@ -1860,9 +1894,9 @@ Spender: ${toAddress}
     });
     console.log("✅ Withdraw result:", withdrawResult);
   };
+  */
 
   // Test UI
-  return;
   // <div className="flex gap-2">
   //   <button
   //     onClick={testStake}

@@ -20,6 +20,7 @@ import { getContractAddressWithDecimals } from "@/lib/coingecko";
 import SlippageSelector from "@/components/SlippageSelector";
 import { useRewardIntegrations } from "@/hooks/useRewardIntegrations";
 import { logUserAction } from "@/actions/statistics";
+import { getTokenUsdPrice } from "@/lib/pricing";
 
 const Uniswap = () => {
   const { isConnected, address } = useAppKitAccount();
@@ -429,13 +430,15 @@ const Uniswap = () => {
       // Log swap action to statistics
       if (address) {
         try {
+          const price = await getTokenUsdPrice(tokenInSymbol);
+          const createdAt = new Date().toISOString();
           await logUserAction({
             address,
             agent: "Uniswap",
             action: "swap",
             volume: parseFloat(amount),
             token: tokenInSymbol,
-            volumeUsd: 0, // Would need price data to calculate USD value
+            volumeUsd: parseFloat(amount) * (price || 0),
             extra: {
               tokenOut: tokenOutSymbol,
               platform,
@@ -445,6 +448,7 @@ const Uniswap = () => {
                 trade.outputAmount.raw.toString(),
                 tokenOutData.decimals || 18
               ),
+              createdAt,
             },
           });
           console.log("✅ Swap action logged to statistics");
@@ -840,16 +844,19 @@ const Uniswap = () => {
       // Log wrap action to statistics
       if (address) {
         try {
+          const price = await getTokenUsdPrice("ETH");
+          const createdAt = new Date().toISOString();
           await logUserAction({
             address,
             agent: "Uniswap",
             action: "wrap",
             volume: parseFloat(amount),
             token: "ETH",
-            volumeUsd: 0, // Would need price data to calculate USD value
+            volumeUsd: parseFloat(amount) * (price || 0),
             extra: {
               wethReceived: ethers.utils.formatEther(wethReceived),
               txHash: wrapReceipt.transactionHash,
+              createdAt,
             },
           });
           console.log("✅ Wrap action logged to statistics");
@@ -998,16 +1005,19 @@ const Uniswap = () => {
       // Log unwrap action to statistics
       if (address) {
         try {
+          const price = await getTokenUsdPrice("WETH");
+          const createdAt = new Date().toISOString();
           await logUserAction({
             address,
             agent: "Uniswap",
             action: "unwrap",
             volume: parseFloat(amount),
             token: "WETH",
-            volumeUsd: 0, // Would need price data to calculate USD value
+            volumeUsd: parseFloat(amount) * (price || 0),
             extra: {
               ethReceived: ethers.utils.formatEther(ethReceived),
               txHash: unwrapReceipt.transactionHash,
+              createdAt,
             },
           });
           console.log("✅ Unwrap action logged to statistics");

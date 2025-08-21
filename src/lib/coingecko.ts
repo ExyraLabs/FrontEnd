@@ -169,7 +169,7 @@ export async function fetchTokenPrice(coinId: string): Promise<{
 export async function fetchCoinDetails(
   coinId: string
 ): Promise<CoinDetailData | null> {
-  console.log(`Fetching details for coin ID: ${coinId}`);
+  // console.log(`Fetching details for coin ID: ${coinId}`);
 
   const response = await fetchWithRetry(
     `https://api.coingecko.com/api/v3/coins/${coinId}?localization=false&tickers=true&market_data=false&community_data=false&developer_data=false&sparkline=false`,

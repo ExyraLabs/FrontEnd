@@ -14,7 +14,7 @@ export const useUserLogin = () => {
       if (address && isConnected) {
         try {
           await logUserLogin(address);
-          console.log("✅ User login logged to database:", address);
+          // console.log("✅ User login logged to database:", address);
         } catch (error) {
           console.warn("Failed to log user login:", error);
         }

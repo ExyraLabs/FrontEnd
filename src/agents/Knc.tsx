@@ -8,6 +8,7 @@ import { getContractAddressWithDecimals } from "@/lib/coingecko";
 import SlippageSelector from "@/components/SlippageSelector";
 import { useRewardIntegrations } from "@/hooks/useRewardIntegrations";
 import { logUserAction } from "@/actions/statistics";
+import { getTokenUsdPrice } from "@/lib/pricing";
 
 // KyberSwap Aggregator API configuration
 const KYBERSWAP_API_BASE = "https://aggregator-api.kyberswap.com";
@@ -348,19 +349,24 @@ const Knc = () => {
       // Log quote request to statistics
       if (address) {
         try {
+          const price = await getTokenUsdPrice(tokenInSymbol);
+          const createdAt = new Date().toISOString();
           await logUserAction({
             address,
             agent: "KyberSwap",
             action: "quote",
             volume: parseFloat(amount),
             token: tokenInSymbol,
-            volumeUsd: parseFloat(routeSummary.amountInUsd || "0"),
+            volumeUsd:
+              parseFloat(routeSummary.amountInUsd || "0") ||
+              parseFloat(amount) * (price || 0),
             extra: {
               tokenOut: tokenOutSymbol,
               platform,
               effectiveRate,
               gasUsd: routeSummary.gasUsd,
               routeID: routeSummary.routeID,
+              createdAt,
             },
           });
           console.log("✅ Quote action logged to statistics");
@@ -659,13 +665,17 @@ const Knc = () => {
 
       // Log swap action to statistics
       try {
+        const price = await getTokenUsdPrice(tokenInSymbol);
+        const createdAt = new Date().toISOString();
         await logUserAction({
           address: address!,
           agent: "KyberSwap",
           action: "swap",
           volume: parseFloat(amount),
           token: tokenInSymbol,
-          volumeUsd: parseFloat(routeData.routeSummary.amountInUsd || "0"),
+          volumeUsd:
+            parseFloat(routeData.routeSummary.amountInUsd || "0") ||
+            parseFloat(amount) * (price || 0),
           extra: {
             tokenOut: tokenOutSymbol,
             platform,
@@ -673,6 +683,7 @@ const Knc = () => {
             txHash: executeSwapTxReceipt?.transactionHash || executeSwapTx.hash,
             amountOut: routeData.routeSummary.amountOut,
             amountOutUsd: routeData.routeSummary.amountOutUsd,
+            createdAt,
           },
         });
         console.log("✅ Swap action logged to statistics");
