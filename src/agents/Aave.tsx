@@ -948,8 +948,10 @@ const Aave = () => {
     console.log(res, "supply response");
   };
 
-  return <button onClick={Test}>Test Aave</button>;
-  //  null
+  return (
+    null;
+    //<button onClick={Test}>Test Aave</button>;
+  )
 };
 
 export default Aave;
