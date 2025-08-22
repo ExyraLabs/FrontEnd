@@ -10,6 +10,7 @@ import {
 import { MCPClient } from "@/lib/mcp-client";
 // import { MCPClient } from "@/lib/mcp-client";
 import {
+  AnthropicAdapter,
   CopilotRuntime,
   copilotRuntimeNextJSAppRouterEndpoint,
   OpenAIAdapter,
@@ -17,7 +18,9 @@ import {
 
 import { NextRequest } from "next/server";
 
-// const serviceAdapter = new AnthropicAdapter();
+// const serviceAdapter = new AnthropicAdapter({
+//   model: "claude-sonnet-4-20250514",
+// });
 const serviceAdapter = new OpenAIAdapter({ model: "gpt-4.1" });
 
 /**

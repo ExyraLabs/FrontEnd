@@ -1,49 +1,40 @@
 "use client";
 import ConnectWalletModal from "@/components/ConnectWalletModal";
 import MarkdownRenderer from "@/components/MarkdownRenderer";
+import Toast from "@/components/Toast";
 import { ToolRenderer } from "@/components/ToolRenderer";
 import { useChatRoomsMessages } from "@/hooks/useChatRoomsMessages";
-import { useSavedPrompts } from "@/hooks/useSavedPrompts";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
-import Toast from "@/components/Toast";
-import { useAppKitAccount } from "@reown/appkit/react";
-import Image from "next/image";
-import { useParams, useSearchParams, useRouter } from "next/navigation";
-import React, { useEffect, useRef, useState } from "react";
-import { motion } from "framer-motion";
+import { useSavedPrompts } from "@/hooks/useSavedPrompts";
 import {
-  TextMessage,
+  useCopilotAdditionalInstructions,
+  useCopilotChat,
+  // internal context gives access to registered actions & their render fns
+  useCopilotContext,
+  useCopilotMessagesContext,
+} from "@copilotkit/react-core";
+import {
   ActionExecutionMessage,
   ResultMessage,
   Role,
+  TextMessage,
 } from "@copilotkit/runtime-client-gql";
-import {
-  useCopilotChat,
-  useCopilotMessagesContext,
-  // internal context gives access to registered actions & their render fns
-  useCopilotContext,
-  useCopilotAdditionalInstructions,
-} from "@copilotkit/react-core";
+import { useAppKitAccount } from "@reown/appkit/react";
+import { motion } from "framer-motion";
+import Image from "next/image";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import React, { useEffect, useRef, useState } from "react";
 import { BaseMessage, CombinedToolCall } from "../../../../types";
-// import Uniswap from "@/agents/Uniswap"; // unused currently
-// import McpServerManager from "@/components/McpServerManager"; // unused currently
-// import Curve from "@/agents/Curve"; // unused currently
-import AlchemyAgent from "@/agents/Alchemy"; // keep used component
 import dynamic from "next/dynamic";
-import Knc from "@/agents/Knc";
-// import { CopilotChat } from "@copilotkit/react-ui"; // not used in custom UI
 import { useAppDispatch, useAppSelector } from "@/store";
 import {
   checkDailyReset,
+  loadRewardsFromDb,
   recordChatMessage,
   selectChatMessageCount,
   selectDailyMessageLimit,
   setWallet,
-  loadRewardsFromDb, // hydrate persisted state
 } from "@/store/rewardsSlice";
-import Uniswap from "@/agents/Uniswap";
-import { withdraw } from "viem/zksync";
-import Aave from "@/agents/Aave";
 
 const Lido = dynamic(() => import("@/agents/Lido"), {
   ssr: false,
@@ -72,7 +63,11 @@ const Page = () => {
   const { visibleMessages, appendMessage, isLoading } = useCopilotChat({
     id: id,
     makeSystemMessage: () =>
-      "I am Agent Exyra, and here to help you in your Defi Journey. To get started, simply give me a prompt.",
+      `You are Agent Exyra, a specialized assistant for guiding users in their DeFi journey. 
+     Always check if one of the available DeFi tools can be used to answer the user’s request. 
+     - If a relevant tool is available, use it directly and explain the result clearly. 
+     - If no matching tool is available, explain that this feature is not yet supported and guide the user toward other trusted DeFi resources (e.g., CoinGecko, Uniswap, Lido, Aave, KyberSwap official docs). 
+     Stay accurate, concise, and transparent about what you can and cannot do.`,
 
     // initialMessages: messages,
   });
@@ -236,21 +231,6 @@ const Page = () => {
       GettingRoutes: "/icons/kyber.png",
       Swapping: "/icons/kyber.png",
       executeKyberSwap: "/icons/kyber.png",
-      getTokenInfo: "/icons/kyber.png",
-      getCommonTokens: "/icons/kyber.png",
-      compareSwapOptions: "/icons/kyber.png",
-      kyberSwapOverview: "/icons/kyber.png",
-      kyberSwap: "/icons/kyber.png",
-      getKyberRates: "/icons/kyber.png",
-
-      // Curve tools
-      curve: "/icons/curve.jpeg",
-      curveTokens: "/icons/curve.jpeg",
-
-      // Generic DeFi tools
-      swap: "/icons/swap.svg",
-      stake: "/icons/stake.svg",
-      lend: "/icons/lend.svg",
 
       // Alchemy tools
       getAccountBalance: "/icons/alchemy.svg",
@@ -259,6 +239,7 @@ const Page = () => {
       //Aave Tools
       Lend: "/icons/aave.svg",
       FindingReserves: "/icons/aave.svg",
+      FindHighestApyReserves: "/icons/aave.svg",
     };
 
     return toolIconMapping[toolName] || null;
@@ -809,11 +790,7 @@ const Page = () => {
       </motion.div>
 
       <ToolRenderer />
-      <Uniswap />
-      <Lido />
-      <Knc />
-      <AlchemyAgent />
-      <Aave />
+
       {/* <Curve /> */}
     </div>
   );

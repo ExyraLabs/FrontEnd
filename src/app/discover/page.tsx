@@ -169,7 +169,7 @@ const AGENT_CARDS = [
       "Access flash loans",
     ],
     prompts: [
-      "Lend 0.0005 WETH on Aave",
+      "Lend 0.0005 WETH",
       "What are the current lending rates for WETH?",
     ],
     chains: ["Ethereum"],
@@ -203,7 +203,7 @@ const Explore = () => {
   }, []);
 
   return (
-    <div className="flex flex-col px-4 overflow-y-scroll w-full">
+    <div className="flex flex-col px-4 scrollbar-hide  overflow-y-scroll w-full">
       {/* Page Title */}
       <h1 className="text-[28px] font-bold text-white mb-4 mt-2">
         Explore Agents
@@ -320,7 +320,7 @@ const Explore = () => {
       </div>
 
       {/* Cards grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1  md:grid-cols-2 xl:grid-cols-3 gap-6">
         {filteredCards.length > 0 ? (
           filteredCards.map((card, idx) => <AgentCard key={idx} {...card} />)
         ) : (

@@ -11,6 +11,7 @@ import { bigDecimal, evmAddress, useSupply } from "@aave/react";
 import { useSendTransaction, useERC20Permit } from "@aave/react/viem";
 import { logUserAction } from "@/actions/statistics";
 import { getTokenUsdPrice } from "@/lib/pricing";
+import { findHighestApyReserves } from "./aave-functions";
 
 const Aave = () => {
   const { data: walletClient } = useWalletClient();
@@ -52,8 +53,9 @@ const Aave = () => {
   }, [data]);
 
   useCopilotAdditionalInstructions({
-    instructions:
-      "Make sure to use the connect wallet for transactions except an address is specifically provided",
+    instructions: `Make sure to use the connect wallet for transactions except an address is specifically provided
+    -Currently, you have direct integration with Aave to execute transactions or facilitate lending actions on users behalf.
+    `,
   });
 
   // CopilotKit Actions for Aave Market Analysis
@@ -78,39 +80,39 @@ const Aave = () => {
   // });
 
   // // Action 2: Find highest APY reserves
-  // useCopilotAction({
-  //   name: "findHighestApyReserves",
-  //   description:
-  //     "Find Aave reserves with the highest supply or borrow APY rates",
-  //   parameters: [
-  //     {
-  //       name: "type",
-  //       type: "string",
-  //       description:
-  //         "Type of APY to search for: 'supply' or 'borrow' (default: 'supply')",
-  //       required: false,
-  //     },
-  //     {
-  //       name: "limit",
-  //       type: "number",
-  //       description: "Number of top reserves to return (default: 10)",
-  //       required: false,
-  //     },
-  //     {
-  //       name: "minLiquidity",
-  //       type: "number",
-  //       description: "Minimum USD liquidity to filter results (default: 0)",
-  //       required: false,
-  //     },
-  //   ],
-  //   handler: async ({ type = "supply", limit = 10, minLiquidity = 0 }) => {
-  //     return findHighestApyReserves(data || [], {
-  //       type: type as "supply" | "borrow",
-  //       limit,
-  //       minLiquidity,
-  //     });
-  //   },
-  // });
+  useCopilotAction({
+    name: "FindHighestApyReserves",
+    description:
+      "Find Aave reserves with the highest supply or borrow APY rates",
+    parameters: [
+      {
+        name: "type",
+        type: "string",
+        description:
+          "Type of APY to search for: 'supply' or 'borrow' (default: 'supply')",
+        required: false,
+      },
+      {
+        name: "limit",
+        type: "number",
+        description: "Number of top reserves to return (default: 10)",
+        required: false,
+      },
+      {
+        name: "minLiquidity",
+        type: "number",
+        description: "Minimum USD liquidity to filter results (default: 0)",
+        required: false,
+      },
+    ],
+    handler: async ({ type = "supply", limit = 10, minLiquidity = 0 }) => {
+      return findHighestApyReserves(data || [], {
+        type: type as "supply" | "borrow",
+        limit,
+        minLiquidity,
+      });
+    },
+  });
 
   // // Action 3: Find reserves by volume/liquidity
   // useCopilotAction({
@@ -493,13 +495,12 @@ const Aave = () => {
     onBehalfOf?: string;
   };
 
-  // Utility to safely log user actions to server (non-blocking)
-  const safeLog = async (params: Parameters<typeof logUserAction>[0]) => {
-    try {
-      await logUserAction(params);
-    } catch {
-      // swallow logging errors
-    }
+  // Utility to safely log user actions to server (fire-and-forget)
+  const safeLog = (params: Parameters<typeof logUserAction>[0]) => {
+    // Fire and forget - don't await to avoid returning MongoDB documents
+    logUserAction(params).catch(() => {
+      // swallow logging errors silently
+    });
   };
 
   const executeSupplyOperation = async ({
@@ -694,7 +695,7 @@ const Aave = () => {
             targetReserve.underlyingToken?.symbol || symbol || "";
           const price = await getTokenUsdPrice(tokenSym);
           const createdAt = new Date().toISOString();
-          await safeLog({
+          safeLog({
             address: senderAddress!,
             agent: "Aave",
             action: "Lend",
@@ -756,7 +757,7 @@ const Aave = () => {
               targetReserve.underlyingToken?.symbol || symbol || "";
             const price = await getTokenUsdPrice(tokenSym);
             const createdAt = new Date().toISOString();
-            await safeLog({
+            safeLog({
               address: senderAddress!,
               agent: "Aave",
               action: "Lend",
@@ -782,7 +783,7 @@ const Aave = () => {
             targetReserve.underlyingToken?.symbol || symbol || "";
           const price = await getTokenUsdPrice(tokenSym);
           const createdAt = new Date().toISOString();
-          await safeLog({
+          safeLog({
             address: senderAddress!,
             agent: "Aave",
             action: "Lend",
@@ -826,7 +827,7 @@ const Aave = () => {
         const tokenSym = targetReserve.underlyingToken?.symbol || symbol || "";
         const price = await getTokenUsdPrice(tokenSym);
         const createdAt = new Date().toISOString();
-        await safeLog({
+        safeLog({
           address: senderAddress!,
           agent: "Aave",
           action: "Lend",
@@ -926,29 +927,29 @@ const Aave = () => {
 
   const Test = async () => {
     // Test Aave functions here
-    // const res = findHighestApyReserves(data || [], {
+    // const res = findHighestApyReserves(findHighestApyReserves || [], {
     //   type: "supply",
     // });
     // console.log(res, "response");
 
     const WETH = allReserves.find(
-      (r: ExtendedReserve) => r.underlyingToken.symbol === "USDC"
+      (r: ExtendedReserve) => r.underlyingToken.symbol === "WETH"
     );
     console.log(WETH, "WETH");
 
     const res = await executeSupplyOperation({
       symbol: WETH?.underlyingToken.symbol,
       address: WETH?.underlyingToken.address,
-      amount: "1",
+      amount: "0.0005",
       useNative: false,
-      usePermit: false,
+      usePermit: true,
     });
 
     console.log(res, "supply response");
   };
 
-  return null;
-  // <button onClick={Test}>Test Aave</button>
+  return <button onClick={Test}>Test Aave</button>;
+  //  null
 };
 
 export default Aave;

@@ -10,6 +10,11 @@ import { Message } from "@copilotkit/runtime-client-gql";
 import GradientLine from "./GradientLine";
 import { socialLinks } from "@/utils/constants";
 import { getChatRelativeTime } from "@/utils/timeUtils";
+import Uniswap from "@/agents/Uniswap";
+import Lido from "@/agents/Lido";
+import Knc from "@/agents/Knc";
+import AlchemyAgent from "@/agents/Alchemy";
+import Aave from "@/agents/Aave";
 
 interface SidebarProps {
   open?: boolean;
@@ -1172,6 +1177,11 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
           </div>
         </div>
       </div>
+      <Uniswap />
+      <Lido />
+      <Knc />
+      <AlchemyAgent />
+      <Aave />
     </>
   );
 };
