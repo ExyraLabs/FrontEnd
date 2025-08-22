@@ -47,6 +47,26 @@ export async function logUserLogin(address: string) {
   return { address };
 }
 
+export async function getAllStatistics() {
+  const client = await clientPromise;
+  const db = client.db();
+  const statistics = db.collection("statistics");
+  const results = await statistics.find({}).sort({ timestamp: -1 }).toArray();
+
+  // Convert MongoDB documents to plain objects
+  return results.map((doc) => ({
+    _id: doc._id.toString(),
+    address: doc.address,
+    agent: doc.agent,
+    action: doc.action,
+    volume: doc.volume,
+    token: doc.token,
+    volumeUsd: doc.volumeUsd,
+    extra: doc.extra,
+    timestamp: doc.timestamp.toISOString(),
+  }));
+}
+
 export async function getUserStatistics(address: string) {
   const client = await clientPromise;
   const db = client.db();

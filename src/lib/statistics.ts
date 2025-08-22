@@ -1,4 +1,4 @@
-import { getUserStatistics } from "@/actions/statistics";
+import { getUserStatistics, getAllStatistics } from "@/actions/statistics";
 
 /**
  * Fetch user statistics using server action
@@ -9,6 +9,19 @@ export async function fetchUserStatistics(address: string) {
     return statistics;
   } catch (error) {
     console.error("Error fetching user statistics:", error);
+    throw error;
+  }
+}
+
+/**
+ * Fetch all users' statistics using server action
+ */
+export async function fetchAllStatistics() {
+  try {
+    const statistics = await getAllStatistics();
+    return statistics;
+  } catch (error) {
+    console.error("Error fetching all statistics:", error);
     throw error;
   }
 }

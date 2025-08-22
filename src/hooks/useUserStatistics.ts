@@ -1,30 +1,23 @@
 "use client";
 import { useState, useEffect, useCallback, startTransition } from "react";
-import { useAppKitAccount } from "@reown/appkit/react";
 import {
-  fetchUserStatistics,
+  fetchAllStatistics,
   UserStatistic,
   aggregateStatistics,
 } from "@/lib/statistics";
 
 export function useUserStatistics() {
-  const { address } = useAppKitAccount();
   const [statistics, setStatistics] = useState<UserStatistic[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const loadStatistics = useCallback(async () => {
-    if (!address) {
-      setStatistics([]);
-      return;
-    }
-
     setLoading(true);
     setError(null);
 
     startTransition(async () => {
       try {
-        const data = await fetchUserStatistics(address);
+        const data = await fetchAllStatistics();
         setStatistics(data);
       } catch (err) {
         setError(
@@ -34,7 +27,7 @@ export function useUserStatistics() {
         setLoading(false);
       }
     });
-  }, [address]);
+  }, []);
 
   useEffect(() => {
     loadStatistics();

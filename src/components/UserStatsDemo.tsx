@@ -228,10 +228,11 @@ export default function UserStatsDemo() {
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
             <div>
               <h1 className="text-2xl lg:text-3xl font-bold text-white mb-2">
-                🛡️ Admin Dashboard
+                🛡️ Admin Dashboard - All Users
               </h1>
               <p className="text-gray-400">
-                Comprehensive analytics and user activity monitoring
+                Comprehensive analytics and activity monitoring for all platform
+                users
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -556,7 +557,7 @@ export default function UserStatsDemo() {
             <div className="p-6 border-b border-gray-700">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-semibold text-white">
-                  Activity History ({filteredStats.length} transactions)
+                  All User Activity ({filteredStats.length} transactions)
                 </h2>
                 <div className="text-sm text-gray-400">
                   Total filtered volume: $
@@ -667,7 +668,7 @@ export default function UserStatsDemo() {
             </h3>
             <p className="text-gray-400">
               {statistics.length === 0
-                ? "No user activity data available yet."
+                ? "No platform activity data available yet."
                 : "No transactions match your current filters."}
             </p>
           </div>
