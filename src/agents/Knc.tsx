@@ -346,35 +346,6 @@ const Knc = () => {
         })),
       };
 
-      // Log quote request to statistics
-      if (address) {
-        try {
-          const price = await getTokenUsdPrice(tokenInSymbol);
-          const createdAt = new Date().toISOString();
-          await logUserAction({
-            address,
-            agent: "KyberSwap",
-            action: "quote",
-            volume: parseFloat(amount),
-            token: tokenInSymbol,
-            volumeUsd:
-              parseFloat(routeSummary.amountInUsd || "0") ||
-              parseFloat(amount) * (price || 0),
-            extra: {
-              tokenOut: tokenOutSymbol,
-              platform,
-              effectiveRate,
-              gasUsd: routeSummary.gasUsd,
-              routeID: routeSummary.routeID,
-              createdAt,
-            },
-          });
-          console.log("✅ Quote action logged to statistics");
-        } catch (statsError) {
-          console.warn("Failed to log quote statistics:", statsError);
-        }
-      }
-
       return [
         header,
         usdLine,

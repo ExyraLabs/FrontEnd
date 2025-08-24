@@ -1,5 +1,14 @@
 "use client";
-import { chainId, Market, Reserve, useAaveMarkets } from "@aave/react";
+import {
+  chainId,
+  Market,
+  Reserve,
+  useAaveMarkets,
+  useUserSupplies,
+  useUserBorrows,
+  useCollateralToggle,
+  useBorrow,
+} from "@aave/react";
 import {
   useCopilotAction,
   useCopilotAdditionalInstructions,
@@ -23,6 +32,35 @@ const Aave = () => {
   const [supply] = useSupply();
   const [sendTransaction] = useSendTransaction(walletClient);
   const [signPermit] = useERC20Permit(walletClient);
+  const [toggleCollateral, toggling] = useCollateralToggle();
+  const [borrow, borrowing] = useBorrow();
+  const {
+    data: userSupplies,
+    loading,
+    error,
+  } = useUserSupplies({
+    markets: data
+      ? data.map((market) => ({
+          chainId: market.chain.chainId,
+          address: market.address,
+        }))
+      : [],
+    user: userAddr ? evmAddress(userAddr) : undefined,
+  });
+
+  const {
+    data: userBorrows,
+    loading: borrowsLoading,
+    error: borrowsError,
+  } = useUserBorrows({
+    markets: data
+      ? data.map((market) => ({
+          chainId: market.chain.chainId,
+          address: market.address,
+        }))
+      : [],
+    user: userAddr ? evmAddress(userAddr) : undefined,
+  });
 
   // Flatten all reserves from all markets for unified display
   const allReserves = useMemo(() => {
@@ -114,339 +152,259 @@ const Aave = () => {
     },
   });
 
-  // // Action 3: Find reserves by volume/liquidity
+  // // Action: Get User Supply Positions
   // useCopilotAction({
-  //   name: "findReservesByVolume",
-  //   description: "Find Aave reserves filtered by total volume/liquidity in USD",
-  //   parameters: [
-  //     {
-  //       name: "minVolume",
-  //       type: "number",
-  //       description: "Minimum volume in USD (e.g., 1000000 for $1M)",
-  //       required: true,
-  //     },
-  //     {
-  //       name: "maxVolume",
-  //       type: "number",
-  //       description: "Maximum volume in USD (optional)",
-  //       required: false,
-  //     },
-  //     {
-  //       name: "type",
-  //       type: "string",
-  //       description:
-  //         "Filter by 'supply', 'borrow', or 'both' (default: 'both')",
-  //       required: false,
-  //     },
-  //     {
-  //       name: "sortBy",
-  //       type: "string",
-  //       description:
-  //         "Sort by 'volume', 'apy', or 'utilization' (default: 'volume')",
-  //       required: false,
-  //     },
-  //   ],
-  //   handler: async ({
-  //     minVolume,
-  //     maxVolume,
-  //     type = "both",
-  //     sortBy = "volume",
-  //   }) => {
-  //     return findReservesByVolume(data || [], {
-  //       minVolume,
-  //       maxVolume,
-  //       type: type as "supply" | "borrow" | "both",
-  //       sortBy: sortBy as "volume" | "apy" | "utilization",
-  //     });
-  //   },
-  // });
-
-  // // Action 4: Market statistics and overview
-  // useCopilotAction({
-  //   name: "getAaveMarketStats",
+  //   name: "GetUserSupplyPositions",
   //   description:
-  //     "Get comprehensive statistics and overview of all Aave markets",
+  //     "Get all user's supplied positions across Aave markets with detailed information including APY, balances, and USD values",
   //   parameters: [
-  //     {
-  //       name: "includeDetails",
-  //       type: "boolean",
-  //       description: "Include detailed breakdown by market (default: false)",
-  //       required: false,
-  //     },
-  //   ],
-  //   handler: async ({ includeDetails = false }) => {
-  //     return getAaveMarketStats(data || [], { includeDetails });
-  //   },
-  // });
-
-  // // Action 5: Find reserves with specific characteristics
-  // useCopilotAction({
-  //   name: "findReservesByCharacteristics",
-  //   description:
-  //     "Find Aave reserves with specific characteristics like high utilization, low LTV, flash loan support, etc.",
-  //   parameters: [
-  //     {
-  //       name: "minUtilization",
-  //       type: "number",
-  //       description: "Minimum utilization rate percentage (0-100)",
-  //       required: false,
-  //     },
-  //     {
-  //       name: "maxUtilization",
-  //       type: "number",
-  //       description: "Maximum utilization rate percentage (0-100)",
-  //       required: false,
-  //     },
-  //     {
-  //       name: "flashLoanEnabled",
-  //       type: "boolean",
-  //       description: "Filter by flash loan support",
-  //       required: false,
-  //     },
-  //     {
-  //       name: "minLTV",
-  //       type: "number",
-  //       description: "Minimum Loan-to-Value ratio percentage",
-  //       required: false,
-  //     },
-  //     {
-  //       name: "maxLTV",
-  //       type: "number",
-  //       description: "Maximum Loan-to-Value ratio percentage",
-  //       required: false,
-  //     },
-  //     {
-  //       name: "excludeFrozen",
-  //       type: "boolean",
-  //       description: "Exclude frozen or paused reserves (default: true)",
-  //       required: false,
-  //     },
-  //   ],
-  //   handler: async ({
-  //     minUtilization,
-  //     maxUtilization,
-  //     flashLoanEnabled,
-  //     minLTV,
-  //     maxLTV,
-  //     excludeFrozen = true,
-  //   }) => {
-  //     return findReservesByCharacteristics(data || [], {
-  //       minUtilization,
-  //       maxUtilization,
-  //       flashLoanEnabled,
-  //       minLTV,
-  //       maxLTV,
-  //       excludeFrozen,
-  //     });
-  //   },
-  // });
-
-  // // Action 6: Find suitable supply reserves
-  // useCopilotAction({
-  //   name: "findSuitableSupplyReserves",
-  //   description:
-  //     "Find Aave reserves suitable for supply/deposit operations based on user criteria",
-  //   parameters: [
-  //     {
-  //       name: "minApy",
-  //       type: "number",
-  //       description: "Minimum supply APY percentage required",
-  //       required: false,
-  //     },
-  //     {
-  //       name: "maxRisk",
-  //       type: "string",
-  //       description: "Maximum risk tolerance: low, medium, or high",
-  //       required: false,
-  //     },
-  //     {
-  //       name: "includeNative",
-  //       type: "boolean",
-  //       description: "Include native token supply options (default: true)",
-  //       required: false,
-  //     },
-  //     {
-  //       name: "minLiquidity",
-  //       type: "number",
-  //       description: "Minimum total liquidity in USD",
-  //       required: false,
-  //     },
-  //   ],
-  //   handler: async ({ minApy, maxRisk, includeNative, minLiquidity }) => {
-  //     return findSuitableSupplyReserves(data || [], {
-  //       minApy,
-  //       maxRisk: maxRisk as "low" | "medium" | "high",
-  //       includeNative,
-  //       minLiquidity,
-  //     });
-  //   },
-  // });
-
-  // // Action 7: Analyze specific reserve for supply
-  // useCopilotAction({
-  //   name: "analyzeSupplyReserve",
-  //   description:
-  //     "Get detailed analysis of a specific reserve for supply operations including risk assessment, yield calculations, and implementation guidance",
-  //   parameters: [
-  //     {
-  //       name: "symbol",
-  //       type: "string",
-  //       description: "Token symbol to analyze (e.g., ETH, USDC, DAI)",
-  //       required: false,
-  //     },
-  //     {
-  //       name: "address",
-  //       type: "string",
-  //       description: "Token contract address to analyze",
-  //       required: false,
-  //     },
-  //     {
-  //       name: "amount",
-  //       type: "string",
-  //       description: "Amount to supply for specific calculations",
-  //       required: false,
-  //     },
   //     {
   //       name: "userAddress",
   //       type: "string",
-  //       description: "User address for personalized limits and analysis",
+  //       description:
+  //         "User wallet address (optional, defaults to connected wallet)",
   //       required: false,
   //     },
   //   ],
-  //   handler: async ({ symbol, address, amount, userAddress }) => {
-  //     return analyzeSupplyReserve(data || [], {
-  //       symbol,
-  //       address,
-  //       amount,
-  //       userAddress,
-  //     });
+  //   handler: async ({ userAddress }) => {
+  //     const targetAddress = userAddress || userAddr;
+  //     if (!targetAddress) {
+  //       return {
+  //         error: "No wallet connected and no user address provided",
+  //         supplies: [],
+  //         loading: false,
+  //       };
+  //     }
+
+  //     // If requesting different user, we need to fetch their data
+  //     if (userAddress && userAddress !== userAddr) {
+  //       // For different user, we'd need to make a separate call
+  //       // For now, return message that we can only show connected user data
+  //       return {
+  //         error: "Can only show positions for connected wallet address",
+  //         supplies: [],
+  //         loading: false,
+  //       };
+  //     }
+
+  //     const result = {
+  //       loading,
+  //       supplies: userSupplies || [],
+  //       summary: {
+  //         totalPositions: userSupplies?.length || 0,
+  //         totalSuppliedUSD:
+  //           userSupplies?.reduce((sum, position) => {
+  //             const usdValue = parseFloat(position.balance?.usd?.value || "0");
+  //             return sum + usdValue;
+  //           }, 0) || 0,
+  //       },
+  //     };
+
+  //     return result;
   //   },
   // });
 
-  // // Action 8: Get supply recommendations
+  // // Action: Get User Borrow Positions
   // useCopilotAction({
-  //   name: "getSupplyRecommendations",
+  //   name: "GetUserBorrowPositions",
   //   description:
-  //     "Get personalized supply recommendations based on investment goals and risk tolerance",
+  //     "Get all user's borrowed positions across Aave markets with detailed information including APY, debt, and USD values",
   //   parameters: [
   //     {
-  //       name: "goal",
+  //       name: "userAddress",
   //       type: "string",
   //       description:
-  //         "Investment goal: maximize_yield, minimize_risk, balanced, or high_ltv",
-  //       required: false,
-  //     },
-  //     {
-  //       name: "amount",
-  //       type: "string",
-  //       description: "Amount available to supply for tailored recommendations",
-  //       required: false,
-  //     },
-  //     {
-  //       name: "preferredTokens",
-  //       type: "object",
-  //       description: "Array of preferred token symbols to focus on",
-  //       required: false,
-  //     },
-  //     {
-  //       name: "riskTolerance",
-  //       type: "string",
-  //       description:
-  //         "Risk tolerance level: conservative, moderate, or aggressive",
+  //         "User wallet address (optional, defaults to connected wallet)",
   //       required: false,
   //     },
   //   ],
-  //   handler: async ({ goal, amount, preferredTokens, riskTolerance }) => {
-  //     return getSupplyRecommendations(data || [], {
-  //       goal: goal as
-  //         | "maximize_yield"
-  //         | "minimize_risk"
-  //         | "balanced"
-  //         | "high_ltv",
-  //       amount,
-  //       preferredTokens: preferredTokens as string[],
-  //       riskTolerance: riskTolerance as
-  //         | "conservative"
-  //         | "moderate"
-  //         | "aggressive",
-  //     });
+  //   handler: async ({ userAddress }) => {
+  //     const targetAddress = userAddress || userAddr;
+  //     if (!targetAddress) {
+  //       return {
+  //         error: "No wallet connected and no user address provided",
+  //         borrows: [],
+  //         loading: false,
+  //       };
+  //     }
+
+  //     // If requesting different user, we need to fetch their data
+  //     if (userAddress && userAddress !== userAddr) {
+  //       return {
+  //         error: "Can only show positions for connected wallet address",
+  //         borrows: [],
+  //         loading: false,
+  //       };
+  //     }
+
+  //     const result = {
+  //       loading: borrowsLoading,
+  //       borrows: userBorrows || [],
+  //       summary: {
+  //         totalPositions: userBorrows?.length || 0,
+  //         totalBorrowedUSD:
+  //           userBorrows?.reduce((sum, position) => {
+  //             const usdValue = parseFloat(position.debt?.usd?.value || "0");
+  //             return sum + usdValue;
+  //           }, 0) || 0,
+  //       },
+  //     };
+
+  //     return result;
   //   },
   // });
 
-  // Action 9: Prepare supply execution with code generation
+  // Action: Get Complete User Portfolio
+  useCopilotAction({
+    name: "GetUserPortfolio",
+    description:
+      "Get complete user portfolio including both supply and borrow positions with health factor and summary statistics",
+    parameters: [
+      {
+        name: "userAddress",
+        type: "string",
+        description:
+          "User wallet address (optional, defaults to connected wallet)",
+        required: false,
+      },
+    ],
+    handler: async ({ userAddress }) => {
+      const targetAddress = userAddress || userAddr;
+      if (!targetAddress) {
+        return {
+          error: "No wallet connected and no user address provided",
+          portfolio: null,
+        };
+      }
+
+      if (userAddress && userAddress !== userAddr) {
+        return {
+          error: "Can only show portfolio for connected wallet address",
+          portfolio: null,
+        };
+      }
+
+      const totalSuppliedUSD =
+        userSupplies?.reduce((sum, position) => {
+          const usdValue = parseFloat(position.balance?.usd?.value || "0");
+          return sum + usdValue;
+        }, 0) || 0;
+
+      const totalBorrowedUSD =
+        userBorrows?.reduce((sum, position) => {
+          const usdValue = parseFloat(position.debt?.usd?.value || "0");
+          return sum + usdValue;
+        }, 0) || 0;
+
+      const netWorth = totalSuppliedUSD - totalBorrowedUSD;
+
+      const portfolio = {
+        address: targetAddress,
+        loading: loading || borrowsLoading,
+
+        supplies: userSupplies || [],
+        borrows: userBorrows || [],
+        summary: {
+          totalSupplyPositions: userSupplies?.length || 0,
+          totalBorrowPositions: userBorrows?.length || 0,
+          totalSuppliedUSD,
+          totalBorrowedUSD,
+          netWorth,
+          utilizationRatio:
+            totalSuppliedUSD > 0
+              ? (totalBorrowedUSD / totalSuppliedUSD) * 100
+              : 0,
+        },
+      };
+
+      return { portfolio };
+    },
+  });
+
+  // // Action: Get User Position for Specific Token
   // useCopilotAction({
-  //   name: "prepareSupplyExecution",
+  //   name: "GetUserTokenPosition",
   //   description:
-  //     "Prepare complete supply execution plan with step-by-step instructions and ready-to-use code",
+  //     "Get user's position (supply and/or borrow) for a specific token across all Aave markets",
   //   parameters: [
   //     {
-  //       name: "symbol",
+  //       name: "tokenSymbol",
   //       type: "string",
-  //       description: "Token symbol to supply (e.g., ETH, USDC, DAI)",
-  //       required: false,
-  //     },
-  //     {
-  //       name: "address",
-  //       type: "string",
-  //       description: "Token contract address to supply",
-  //       required: false,
-  //     },
-  //     {
-  //       name: "amount",
-  //       type: "string",
-  //       description: "Amount to supply (required)",
+  //       description: "Token symbol to search for (e.g., WETH, USDC, DAI)",
   //       required: true,
   //     },
   //     {
   //       name: "userAddress",
   //       type: "string",
-  //       description: "User wallet address (required)",
-  //       required: true,
-  //     },
-  //     {
-  //       name: "useNative",
-  //       type: "boolean",
-  //       description: "Use native tokens (ETH instead of WETH) when available",
-  //       required: false,
-  //     },
-  //     {
-  //       name: "onBehalfOf",
-  //       type: "string",
-  //       description: "Supply on behalf of another address (optional)",
-  //       required: false,
-  //     },
-  //     {
-  //       name: "usePermit",
-  //       type: "boolean",
   //       description:
-  //         "Use permit for gasless approval (defaults to true if available)",
+  //         "User wallet address (optional, defaults to connected wallet)",
   //       required: false,
   //     },
   //   ],
-  //   handler: async ({
-  //     symbol,
-  //     address,
-  //     amount,
-  //     userAddress,
-  //     useNative,
-  //     onBehalfOf,
-  //     usePermit,
-  //   }) => {
-  //     const res = analyzeAndPrepareSupply(data || [], {
-  //       symbol,
-  //       address,
-  //       amount,
-  //       userAddress,
-  //       useNative,
-  //       onBehalfOf,
-  //       usePermit,
-  //     });
-  //     console.log(res, "response");
-  //     return res;
+  //   handler: async ({ tokenSymbol, userAddress }) => {
+  //     const targetAddress = userAddress || userAddr;
+  //     if (!targetAddress) {
+  //       return {
+  //         error: "No wallet connected and no user address provided",
+  //         position: null,
+  //       };
+  //     }
+
+  //     if (!tokenSymbol) {
+  //       return {
+  //         error: "Token symbol is required",
+  //         position: null,
+  //       };
+  //     }
+
+  //     if (userAddress && userAddress !== userAddr) {
+  //       return {
+  //         error: "Can only show positions for connected wallet address",
+  //         position: null,
+  //       };
+  //     }
+
+  //     const upperSymbol = tokenSymbol.toUpperCase();
+
+  //     // Find supply position
+  //     const supplyPosition = userSupplies?.find(
+  //       (position) => position.currency?.symbol?.toUpperCase() === upperSymbol
+  //     );
+
+  //     // Find borrow position
+  //     const borrowPosition = userBorrows?.find(
+  //       (position) => position.currency?.symbol?.toUpperCase() === upperSymbol
+  //     );
+
+  //     if (!supplyPosition && !borrowPosition) {
+  //       return {
+  //         error: `No positions found for token ${tokenSymbol}`,
+  //         position: null,
+  //       };
+  //     }
+
+  //     const position = {
+  //       tokenSymbol: upperSymbol,
+  //       supply: supplyPosition
+  //         ? {
+  //             balance: supplyPosition.balance,
+  //             marketName: supplyPosition.market?.name,
+  //             isCollateral: supplyPosition.isCollateral,
+  //             canBeCollateral: supplyPosition.canBeCollateral,
+  //           }
+  //         : null,
+  //       borrow: borrowPosition
+  //         ? {
+  //             debt: borrowPosition.debt,
+  //             marketName: borrowPosition.market?.name,
+  //           }
+  //         : null,
+  //     };
+
+  //     return { position };
   //   },
   // });
 
-  // Action 10: Find reserves by token symbol
   useCopilotAction({
     name: "FindingReserves",
     description:
@@ -481,6 +439,500 @@ const Aave = () => {
       }
 
       return results;
+    },
+  });
+
+  // Action: Collateral Management - Enable/Disable Use as Collateral
+  useCopilotAction({
+    name: "ToggleCollateral",
+    description:
+      "Enable or disable a supplied asset as collateral for borrowing. This affects your borrowing power and liquidation risk.",
+    parameters: [
+      {
+        name: "tokenSymbol",
+        type: "string",
+        description:
+          "Token symbol to toggle collateral for (e.g., WETH, USDC, DAI)",
+        required: true,
+      },
+      {
+        name: "enable",
+        type: "boolean",
+        description:
+          "True to enable as collateral, false to disable. If not specified, will toggle current state.",
+        required: false,
+      },
+      {
+        name: "userAddress",
+        type: "string",
+        description:
+          "User wallet address (optional, defaults to connected wallet)",
+        required: false,
+      },
+    ],
+    handler: async ({ tokenSymbol, enable, userAddress }) => {
+      try {
+        const targetAddress = userAddress || userAddr;
+        if (!targetAddress) {
+          return {
+            error: "No wallet connected and no user address provided",
+          };
+        }
+
+        if (!tokenSymbol) {
+          return {
+            error: "Token symbol is required",
+          };
+        }
+
+        // Require an active wallet client for signing and sending transactions
+        if (!walletClient || !walletClient.account) {
+          return {
+            error: "Wallet client not available. Please connect your wallet.",
+          };
+        }
+
+        if (userAddress && userAddress !== userAddr) {
+          return {
+            error: "Can only manage collateral for connected wallet address",
+          };
+        }
+
+        const upperSymbol = tokenSymbol.toUpperCase();
+
+        // Find the user's supply position for this token
+        const supplyPosition = userSupplies?.find(
+          (position) => position.currency?.symbol?.toUpperCase() === upperSymbol
+        );
+
+        if (!supplyPosition) {
+          return `No supply position found for ${tokenSymbol}. You must supply this asset first before using it as collateral.`;
+        }
+
+        // Check if the asset can be used as collateral
+        if (!supplyPosition.canBeCollateral) {
+          return `${tokenSymbol} cannot be used as collateral. This may be due to an Aave DAO governance decision.`;
+        }
+
+        // Determine the action based on current state and user preference
+        const currentlyCollateral = supplyPosition.isCollateral;
+        let shouldEnable: boolean;
+
+        if (enable !== undefined) {
+          shouldEnable = enable;
+          // Validate the requested action makes sense
+          if (enable && currentlyCollateral) {
+            return {
+              error: `${tokenSymbol} is already being used as collateral`,
+            };
+          }
+          if (!enable && !currentlyCollateral) {
+            return {
+              error: `${tokenSymbol} is already not being used as collateral`,
+            };
+          }
+        } else {
+          // Toggle current state
+          shouldEnable = !currentlyCollateral;
+        }
+
+        // Check balance - user must have a balance to toggle collateral
+        const balanceValue = parseFloat(
+          supplyPosition.balance?.amount?.value || "0"
+        );
+        if (balanceValue <= 0) {
+          return {
+            error: `No ${tokenSymbol} balance found to manage as collateral`,
+          };
+        }
+
+        // Execute the collateral toggle
+        const result = await toggleCollateral({
+          market: supplyPosition.market.address,
+          underlyingToken: supplyPosition.currency.address,
+          user: evmAddress(targetAddress),
+          chainId: supplyPosition.market.chain.chainId,
+        }).andThen(sendTransaction);
+
+        // Parse the result
+        if (result.isErr()) {
+          const errorMessage =
+            result.error instanceof Error
+              ? result.error.message
+              : "Collateral toggle failed";
+          return { error: errorMessage };
+        }
+
+        return {
+          success: true,
+          txHash: result.value,
+          token: upperSymbol,
+          previousState: currentlyCollateral,
+          newState: shouldEnable,
+          message: `Successfully ${
+            shouldEnable ? "enabled" : "disabled"
+          } ${tokenSymbol} as collateral`,
+        };
+      } catch (e: unknown) {
+        const errorMessage =
+          e instanceof Error
+            ? e.message
+            : "Unexpected error during collateral toggle";
+        return { error: errorMessage };
+      }
+    },
+  });
+
+  // Action: Borrow Assets from Aave Markets
+  useCopilotAction({
+    name: "Borrow",
+    description:
+      "Borrow assets from Aave markets using your supplied assets as collateral. You must have sufficient collateral and borrowing power.",
+    parameters: [
+      {
+        name: "symbol",
+        type: "string",
+        description: "Token symbol to borrow (e.g., WETH, USDC, DAI)",
+        required: false,
+      },
+      {
+        name: "address",
+        type: "string",
+        description: "Token contract address (overrides symbol if provided)",
+        required: false,
+      },
+      {
+        name: "amount",
+        type: "string",
+        description: "Amount to borrow (required)",
+        required: true,
+      },
+      {
+        name: "userAddress",
+        type: "string",
+        description:
+          "User wallet address (optional, defaults to connected wallet)",
+        required: false,
+      },
+      {
+        name: "useNative",
+        type: "boolean",
+        description:
+          "Receive borrowed assets as native token when supported (e.g., ETH instead of WETH)",
+        required: false,
+      },
+      {
+        name: "onBehalfOf",
+        type: "string",
+        description:
+          "Borrow on behalf of another address (for credit delegation)",
+        required: false,
+      },
+    ],
+    handler: async ({
+      symbol,
+      address,
+      amount,
+      userAddress,
+      useNative = false,
+      onBehalfOf,
+    }) => {
+      try {
+        if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
+          return { error: "Invalid amount provided" };
+        }
+
+        // Require an active wallet client for signing and sending transactions
+        if (!walletClient || !walletClient.account) {
+          return {
+            error: "Wallet client not available. Please connect your wallet.",
+          };
+        }
+
+        // Determine sender (connected wallet if not explicitly provided)
+        const senderAddress =
+          userAddress || walletClient?.account?.address || null;
+        if (!senderAddress) {
+          return {
+            error:
+              "No wallet connected. Please connect a wallet or provide userAddress.",
+          };
+        }
+
+        if (userAddress && userAddress !== userAddr) {
+          return {
+            error: "Can only execute borrows for connected wallet address",
+          };
+        }
+
+        // Find target borrow reserve
+        const target = (allReserves || []).find((r) => {
+          const symbolMatch = symbol
+            ? r?.type === "borrow" &&
+              r?.underlyingToken?.symbol?.toUpperCase?.() ===
+                symbol.trim().toUpperCase()
+            : false;
+          const addressMatch = address
+            ? r?.type === "borrow" &&
+              r?.underlyingToken?.address?.toLowerCase?.() ===
+                address.trim().toLowerCase()
+            : false;
+          return address ? addressMatch : symbolMatch;
+        });
+
+        if (!target) {
+          return {
+            error: "Borrow reserve not found for the provided symbol/address",
+          };
+        }
+
+        if (target.isFrozen) {
+          return { error: "Reserve is frozen and does not allow borrowing" };
+        }
+        if (target.isPaused) {
+          return { error: "Reserve is paused and does not allow borrowing" };
+        }
+
+        // Check user's borrowing capacity
+        if (target.userState) {
+          console.log(target, " Target User State");
+          const maxBorrowable = target.userState.borrowable?.amount?.value;
+          if (!maxBorrowable || parseFloat(maxBorrowable) <= 0) {
+            return {
+              error:
+                "You cannot borrow from this reserve. This may be due to insufficient collateral, borrowing limits, or other restrictions.",
+            };
+          }
+
+          // Check if the requested amount exceeds borrowable amount
+          if (parseFloat(amount) > parseFloat(maxBorrowable)) {
+            return {
+              error: `Requested amount (${amount}) exceeds your maximum borrowable amount (${maxBorrowable}) for ${
+                symbol || address
+              }`,
+            };
+          }
+        } else {
+          return {
+            error:
+              "Cannot determine borrowing capacity. Please ensure you have sufficient collateral.",
+          };
+        }
+
+        const targetReserve = target as Reserve;
+        const chainIdValue = targetReserve.market?.chain?.chainId;
+        const marketAddress = targetReserve.market?.address;
+        if (!chainIdValue || !marketAddress) {
+          return { error: "Missing market or chain information on reserve" };
+        }
+
+        const amountBD = bigDecimal(Number(amount));
+        const sender = evmAddress(senderAddress);
+        const currency = targetReserve.underlyingToken?.address as string;
+
+        // Helper function to execute the borrow plan (similar to supply execution)
+        type BorrowResultReturn = ReturnType<typeof sendTransaction>;
+        type LooseBorrowPlanAndThenable = {
+          andThen: (fn: (val: unknown) => unknown) => unknown;
+        };
+        const isLooseBorrowPlanAndThenable = (
+          x: unknown
+        ): x is LooseBorrowPlanAndThenable =>
+          typeof (x as { andThen?: unknown })?.andThen === "function";
+
+        type BorrowTransactionRequestPlan = {
+          __typename: "TransactionRequest";
+        } & Record<string, unknown>;
+        type BorrowApprovalRequiredPlan = {
+          __typename: "ApprovalRequired";
+          approval: Parameters<typeof sendTransaction>[0];
+          originalTransaction: Parameters<typeof sendTransaction>[0];
+        };
+        type BorrowInsufficientBalanceErrorPlan = {
+          __typename: "InsufficientBalanceError";
+          required?: { value?: unknown };
+        };
+        type BorrowExecutionPlan =
+          | BorrowTransactionRequestPlan
+          | BorrowApprovalRequiredPlan
+          | BorrowInsufficientBalanceErrorPlan;
+
+        const execBorrowPlan = (
+          plan: BorrowExecutionPlan
+        ): BorrowResultReturn | BorrowExecutionPlan => {
+          const typename = plan?.__typename;
+          switch (typename) {
+            case "TransactionRequest":
+              return sendTransaction(
+                plan as unknown as Parameters<typeof sendTransaction>[0]
+              );
+            case "ApprovalRequired":
+              return sendTransaction(
+                (plan as BorrowApprovalRequiredPlan).approval
+              ).andThen(() =>
+                sendTransaction(
+                  (plan as BorrowApprovalRequiredPlan).originalTransaction
+                )
+              );
+            default:
+              return plan;
+          }
+        };
+
+        const execBorrowPlanForAndThen = (plan: unknown): unknown =>
+          execBorrowPlan(plan as BorrowExecutionPlan);
+
+        // Helper: normalize borrow result into { hash } | { error }
+        const parseBorrowResult = (
+          res: unknown
+        ): { hash?: unknown; error?: string } => {
+          try {
+            const typename = (res as { __typename?: string })?.__typename;
+            if (typename === "InsufficientBalanceError") {
+              const required = (res as BorrowInsufficientBalanceErrorPlan)
+                ?.required?.value;
+              return {
+                error: `Insufficient balance${
+                  required ? `: requires ${String(required)}` : ""
+                }`,
+              };
+            }
+            const hasIsErr =
+              typeof (res as { isErr?: unknown }).isErr === "function";
+            if (hasIsErr) {
+              const r = res as {
+                isErr: () => boolean;
+                error?: unknown;
+                value?: unknown;
+              };
+              if (r.isErr()) {
+                const msg =
+                  r?.error instanceof Error ? r.error.message : "Borrow failed";
+                return { error: msg };
+              }
+              return { hash: r.value };
+            }
+            return { hash: res };
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : "Borrow failed";
+            return { error: msg };
+          }
+        };
+
+        // Native borrow path if supported and requested
+        if (useNative && targetReserve.acceptsNative) {
+          const initial = borrow({
+            market: marketAddress,
+            amount: { native: amountBD },
+            sender,
+            chainId: chainIdValue,
+            ...(onBehalfOf ? { onBehalfOf: evmAddress(onBehalfOf) } : {}),
+          });
+          const executed = isLooseBorrowPlanAndThenable(initial)
+            ? await (initial as LooseBorrowPlanAndThenable).andThen(
+                execBorrowPlanForAndThen
+              )
+            : execBorrowPlan(initial as BorrowExecutionPlan);
+          const out = parseBorrowResult(executed);
+
+          if (out.error) {
+            return { error: out.error };
+          }
+
+          // Log successful borrow
+          const tokenSym =
+            targetReserve.underlyingToken?.symbol || symbol || "";
+          const price = await getTokenUsdPrice(tokenSym);
+          const createdAt = new Date().toISOString();
+
+          safeLog({
+            address: senderAddress,
+            agent: "Aave",
+            action: "Borrow",
+            volume: Number(amount) || 0,
+            token: tokenSym,
+            volumeUsd: (Number(amount) || 0) * (price || 0),
+            extra: {
+              branch: "native",
+              chainId: chainIdValue,
+              market: marketAddress,
+              txHash: out.hash,
+              onBehalfOf,
+              createdAt,
+            },
+          });
+
+          return {
+            success: true,
+            txHash: out.hash,
+            amount,
+            token: tokenSym,
+            method: "native",
+            message: `Successfully borrowed ${amount} ${tokenSym} (received as native token)`,
+          };
+        }
+
+        // Standard ERC-20 borrow
+        const plan = borrow({
+          market: marketAddress,
+          amount: {
+            erc20: {
+              currency,
+              value: amountBD,
+            },
+          },
+          sender,
+          chainId: chainIdValue,
+          ...(onBehalfOf ? { onBehalfOf: evmAddress(onBehalfOf) } : {}),
+        });
+        const executed = isLooseBorrowPlanAndThenable(plan)
+          ? await (plan as LooseBorrowPlanAndThenable).andThen(
+              execBorrowPlanForAndThen
+            )
+          : execBorrowPlan(plan as BorrowExecutionPlan);
+        const out = parseBorrowResult(executed);
+
+        if (out.error) {
+          return { error: out.error };
+        }
+
+        // Log successful borrow
+        const tokenSym = targetReserve.underlyingToken?.symbol || symbol || "";
+        const price = await getTokenUsdPrice(tokenSym);
+        const createdAt = new Date().toISOString();
+
+        safeLog({
+          address: senderAddress,
+          agent: "Aave",
+          action: "Borrow",
+          volume: Number(amount) || 0,
+          token: tokenSym,
+          volumeUsd: (Number(amount) || 0) * (price || 0),
+          extra: {
+            branch: "erc20",
+            chainId: chainIdValue,
+            market: marketAddress,
+            txHash: out.hash,
+            onBehalfOf,
+            createdAt,
+          },
+        });
+
+        return {
+          success: true,
+          txHash: out.hash,
+          amount,
+          token: tokenSym,
+          method: "erc20",
+          message: `Successfully borrowed ${amount} ${tokenSym}`,
+        };
+      } catch (e: unknown) {
+        const errorMessage =
+          e instanceof Error
+            ? e.message
+            : "Unexpected error during borrow operation";
+        return { error: errorMessage };
+      }
     },
   });
 
@@ -937,19 +1389,24 @@ const Aave = () => {
     );
     console.log(WETH, "WETH");
 
-    const res = await executeSupplyOperation({
-      symbol: WETH?.underlyingToken.symbol,
-      address: WETH?.underlyingToken.address,
-      amount: "0.0005",
-      useNative: false,
-      usePermit: true,
-    });
+    // const res = await executeSupplyOperation({
+    //   symbol: WETH?.underlyingToken.symbol,
+    //   address: WETH?.underlyingToken.address,
+    //   amount: "0.0005",
+    //   useNative: false,
+    //   usePermit: true,
+    // });
 
-    console.log(res, "supply response");
+    // console.log(res, "supply response");
+    console.log(userSupplies, "user supplies");
+    console.log(userBorrows, "user borrows");
+    console.log(
+      `Loading states - Supplies: ${loading}, Borrows: ${borrowsLoading}, Collateral Toggle: ${toggling.loading}, Borrowing: ${borrowing.loading}`
+    );
   };
 
   return null;
-  //<button onClick={Test}>Test Aae</button>;
+  // <button onClick={Test}>Test Aae</button>;
 };
 
 export default Aave;

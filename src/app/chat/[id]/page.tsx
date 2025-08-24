@@ -234,12 +234,19 @@ const Page = () => {
 
       // Alchemy tools
       getAccountBalance: "/icons/alchemy.svg",
+      getAllTokenBalances: "/icons/alchemy.svg",
 
       // Add more tool mappings as needed
       //Aave Tools
       Lend: "/icons/aave.svg",
+      Borrow: "/icons/aave.svg",
       FindingReserves: "/icons/aave.svg",
       FindHighestApyReserves: "/icons/aave.svg",
+      // GetUserSupplyPositions: "/icons/aave.svg",
+      // GetUserBorrowPositions: "/icons/aave.svg",
+      GetUserPortfolio: "/icons/aave.svg",
+      ToggleCollateral: "/icons/aave.svg",
+      // GetUserTokenPosition: "/icons/aave.svg",
     };
 
     return toolIconMapping[toolName] || null;
