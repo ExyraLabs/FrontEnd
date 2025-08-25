@@ -203,6 +203,7 @@ const SlippageSelector: React.FC<SlippageSelectorProps> = ({
               await Promise.resolve(onConfirm(slippage));
             } finally {
               // Don't reset isSubmitting here; component will unmount when parent status changes.
+              setIsSubmitting(false);
             }
           }}
           disabled={isSubmitting}

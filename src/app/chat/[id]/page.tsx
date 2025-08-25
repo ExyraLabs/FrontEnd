@@ -35,6 +35,10 @@ import {
   selectDailyMessageLimit,
   setWallet,
 } from "@/store/rewardsSlice";
+import Uniswap from "@/agents/Uniswap";
+import Aave from "@/agents/Aave";
+import Knc from "@/agents/Knc";
+import AlchemyAgent from "@/agents/Alchemy";
 
 const Lido = dynamic(() => import("@/agents/Lido"), {
   ssr: false,
@@ -580,7 +584,11 @@ const Page = () => {
 
   useEffect(() => {
     // Handle initial prompt from URL (for new chats)
-    if (promptFromUrl && !initialPromptProcessedRef.current) {
+    if (
+      promptFromUrl &&
+      !initialPromptProcessedRef.current &&
+      isHydratedForId
+    ) {
       // Mark as processed immediately to avoid duplicate sends in Strict Mode
       initialPromptProcessedRef.current = true;
       console.log(
@@ -600,7 +608,7 @@ const Page = () => {
       setIsHydratedForId(true);
     }
     //eslint-disable-next-line
-  }, [promptFromUrl, id]);
+  }, [promptFromUrl, id, isHydratedForId]);
 
   // Ensure rewards persistence works on chat page: set wallet when available
   useEffect(() => {
@@ -798,7 +806,12 @@ const Page = () => {
         </div>
       </motion.div>
 
-      {/* <ToolRenderer /> */}
+      <ToolRenderer />
+      <Uniswap />
+      <Aave />
+      <Knc />
+      <Lido />
+      <AlchemyAgent />
 
       {/* <Curve /> */}
     </div>

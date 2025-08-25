@@ -1177,11 +1177,6 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
           </div>
         </div>
       </div>
-      <Uniswap />
-      <Lido />
-      <Knc />
-      <AlchemyAgent />
-      <Aave />
     </>
   );
 };

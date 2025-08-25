@@ -208,9 +208,9 @@ const Uniswap = () => {
     platform?: string;
     slippage?: string;
   }) => {
-    if (!isConnected || !address) {
-      throw new Error("Wallet not connected");
-    }
+    // if (!isConnected || !address) {
+    //   return { error: "Wallet not connected" };
+    // }
 
     try {
       console.log(
@@ -228,9 +228,9 @@ const Uniswap = () => {
       );
 
       if (!tokenInData?.address || !tokenOutData?.address) {
-        throw new Error(
-          `Could not find contract addresses for ${tokenInSymbol} or ${tokenOutSymbol} on ${platform}.\n\n🔧 Try:\n  • Verify token symbols are correct\n  • Try different platform (ethereum, polygon-pos, binance-smart-chain, etc.)`
-        );
+        return {
+          error: `Could not find contract addresses for ${tokenInSymbol} or ${tokenOutSymbol} on ${platform}.\n\n🔧 Try:\n  • Verify token symbols are correct\n  • Try different platform (ethereum, polygon-pos, binance-smart-chain, etc.)`,
+        };
       }
 
       console.log(`🔍 Step 2: Constructing Uniswap tokens and route...`);
@@ -305,9 +305,10 @@ const Uniswap = () => {
       const signer = await getSigner(address);
 
       if (!signer) {
-        throw new Error(
-          "Unable to get wallet signer. Please ensure your wallet is connected."
-        );
+        return {
+          error:
+            "Unable to get wallet signer. Please ensure your wallet is connected.",
+        };
       }
 
       // Step 4: Handle approval for ERC20 tokens (if needed)
@@ -348,12 +349,12 @@ const Uniswap = () => {
         );
 
         if (balance.lt(amountInWei)) {
-          throw new Error(
-            `❌ Insufficient ${symbol} balance. Needed ${ethers.utils.formatUnits(
+          return {
+            error: `❌ Insufficient ${symbol} balance. Needed ${ethers.utils.formatUnits(
               amountInWei,
               tokenInDecimals
-            )}, have ${ethers.utils.formatUnits(balance, tokenInDecimals)}.`
-          );
+            )}, have ${ethers.utils.formatUnits(balance, tokenInDecimals)}.`,
+          };
         }
 
         if (allowance.lt(amountInWei)) {
@@ -412,7 +413,9 @@ const Uniswap = () => {
           deadline
         );
       } else {
-        throw new Error("Cannot swap ETH for ETH");
+        return {
+          error: "Cannot swap ETH for ETH",
+        };
       }
 
       console.log(`Swap transaction submitted with hash: ${swapTx.hash}`);
