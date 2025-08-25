@@ -665,6 +665,19 @@ const Uniswap = () => {
               Processing {amount} {tokenInSymbol} → {tokenOutSymbol} on{" "}
               {platform}
             </div>
+            <button
+              onClick={() => {
+                console.log("Swap execution cancelled");
+                if (respond) {
+                  (respond as (message: string) => void)(
+                    "🚫 Swap execution cancelled by user"
+                  );
+                }
+              }}
+              className="w-full mt-4 bg-red-500/20 border border-red-500/30 text-red-400 py-2 rounded-lg hover:bg-red-500/30 transition-colors"
+            >
+              Cancel
+            </button>
           </div>
         );
       }

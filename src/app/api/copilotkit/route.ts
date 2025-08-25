@@ -545,7 +545,7 @@ const runtime = new CopilotRuntime({
 
 export const POST = async (req: NextRequest) => {
   try {
-    console.log("[CopilotKit API] Received POST request");
+    // console.log("[CopilotKit API] Received POST request");
 
     // Log the request body to understand what messages are being sent
     const requestBody = await req.text();
@@ -585,7 +585,7 @@ export const POST = async (req: NextRequest) => {
     });
 
     const response = await handleRequest(newReq);
-    console.log("[CopilotKit API] Request handled successfully");
+    // console.log("[CopilotKit API] Request handled successfully");
     return response;
   } catch (error) {
     console.error("[CopilotKit API] Error handling request:", error);

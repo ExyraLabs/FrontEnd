@@ -246,6 +246,8 @@ const Page = () => {
       // GetUserBorrowPositions: "/icons/aave.svg",
       GetUserPortfolio: "/icons/aave.svg",
       ToggleCollateral: "/icons/aave.svg",
+      ApproveCreditDelegation: "/icons/aave.svg",
+      Repay: "/icons/aave.svg",
       // GetUserTokenPosition: "/icons/aave.svg",
     };
 
@@ -796,7 +798,7 @@ const Page = () => {
         </div>
       </motion.div>
 
-      <ToolRenderer />
+      {/* <ToolRenderer /> */}
 
       {/* <Curve /> */}
     </div>

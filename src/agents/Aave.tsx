@@ -8,6 +8,8 @@ import {
   useUserBorrows,
   useCollateralToggle,
   useBorrow,
+  useApproveBorrowCreditDelegation,
+  useRepay,
 } from "@aave/react";
 import {
   useCopilotAction,
@@ -34,6 +36,9 @@ const Aave = () => {
   const [signPermit] = useERC20Permit(walletClient);
   const [toggleCollateral, toggling] = useCollateralToggle();
   const [borrow, borrowing] = useBorrow();
+  const [repay, repaying] = useRepay();
+  const [approveCreditDelegation, approvingDelegation] =
+    useApproveBorrowCreditDelegation();
   const {
     data: userSupplies,
     loading,
@@ -93,6 +98,7 @@ const Aave = () => {
   useCopilotAdditionalInstructions({
     instructions: `Make sure to use the connect wallet for transactions except an address is specifically provided
     -Currently, you have direct integration with Aave to execute transactions or facilitate lending actions on users behalf.
+    - Before repaying a loan, make sure the user has sufficient balance in his or her wallet of the token.
     `,
   });
 
@@ -936,6 +942,663 @@ const Aave = () => {
     },
   });
 
+  // Action: Credit Delegation - Approve Borrow Credit Delegation
+  useCopilotAction({
+    name: "ApproveCreditDelegation",
+    description:
+      "Approve another user (delegatee) to borrow assets against your supply position. Your supplied assets must be enabled as collateral.",
+    parameters: [
+      {
+        name: "tokenSymbol",
+        type: "string",
+        description:
+          "Token symbol for which to delegate credit (e.g., WETH, USDC, DAI)",
+        required: true,
+      },
+      {
+        name: "delegateeAddress",
+        type: "string",
+        description:
+          "Address of the user who will be able to borrow against your collateral",
+        required: true,
+      },
+      {
+        name: "amount",
+        type: "string",
+        description: "Maximum amount that can be borrowed by the delegatee",
+        required: true,
+      },
+      {
+        name: "userAddress",
+        type: "string",
+        description:
+          "Your wallet address (optional, defaults to connected wallet)",
+        required: false,
+      },
+    ],
+    handler: async ({ tokenSymbol, delegateeAddress, amount, userAddress }) => {
+      try {
+        const targetAddress = userAddress || userAddr;
+        if (!targetAddress) {
+          return {
+            error: "No wallet connected and no user address provided",
+          };
+        }
+
+        if (!tokenSymbol) {
+          return {
+            error: "Token symbol is required",
+          };
+        }
+
+        if (!delegateeAddress) {
+          return {
+            error: "Delegatee address is required",
+          };
+        }
+
+        if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
+          return {
+            error: "Invalid delegation amount provided",
+          };
+        }
+
+        // Require an active wallet client for signing and sending transactions
+        if (!walletClient || !walletClient.account) {
+          return {
+            error: "Wallet client not available. Please connect your wallet.",
+          };
+        }
+
+        if (userAddress && userAddress !== userAddr) {
+          return {
+            error:
+              "Can only manage credit delegation for connected wallet address",
+          };
+        }
+
+        // Validate delegatee address format
+        if (
+          !delegateeAddress.startsWith("0x") ||
+          delegateeAddress.length !== 42
+        ) {
+          return {
+            error:
+              "Invalid delegatee address format. Must be a valid Ethereum address (0x...)",
+          };
+        }
+
+        const upperSymbol = tokenSymbol.toUpperCase();
+
+        // Find the user's supply position for this token
+        const supplyPosition = userSupplies?.find(
+          (position) => position.currency?.symbol?.toUpperCase() === upperSymbol
+        );
+
+        if (!supplyPosition) {
+          return {
+            error: `No supply position found for ${tokenSymbol}. You must supply this asset first before delegating credit.`,
+          };
+        }
+
+        // Check if the position is enabled as collateral
+        if (!supplyPosition.isCollateral) {
+          return {
+            error: `${tokenSymbol} is not enabled as collateral. You must enable it as collateral before delegating credit. Use the ToggleCollateral action first.`,
+          };
+        }
+
+        // Check if the asset can be used as collateral
+        if (!supplyPosition.canBeCollateral) {
+          return {
+            error: `${tokenSymbol} cannot be used as collateral and therefore cannot be used for credit delegation.`,
+          };
+        }
+
+        // Check if user has sufficient balance
+        const balanceValue = parseFloat(
+          supplyPosition.balance?.amount?.value || "0"
+        );
+        if (balanceValue <= 0) {
+          return {
+            error: `No ${tokenSymbol} balance found to delegate credit from`,
+          };
+        }
+
+        // Check if delegation amount exceeds actual balance
+        const delegationValue = parseFloat(amount);
+        if (delegationValue > balanceValue) {
+          return {
+            error: `Delegation amount (${amount}) cannot exceed your actual supply balance (${balanceValue}). You can only delegate credit up to your supplied amount.`,
+          };
+        }
+
+        // Execute the credit delegation approval
+        const result = await approveCreditDelegation({
+          market: supplyPosition.market.address,
+          underlyingToken: supplyPosition.currency.address,
+          amount: amount,
+          user: evmAddress(targetAddress),
+          delegatee: evmAddress(delegateeAddress),
+          chainId: supplyPosition.market.chain.chainId,
+        }).andThen(sendTransaction);
+
+        // Parse the result
+        if (result.isErr()) {
+          const errorMessage =
+            result.error instanceof Error
+              ? result.error.message
+              : "Credit delegation approval failed";
+          return { error: errorMessage };
+        }
+
+        // Log the successful action
+        const tokenSym = supplyPosition.currency?.symbol || tokenSymbol;
+        return {
+          success: true,
+          txHash: result.value,
+          token: tokenSym,
+          delegatee: delegateeAddress,
+          amount: amount,
+          supplyBalance: balanceValue,
+          message: `Successfully approved ${delegateeAddress} to borrow up to ${amount} ${tokenSym} against your collateral`,
+        };
+      } catch (e: unknown) {
+        const errorMessage =
+          e instanceof Error
+            ? e.message
+            : "Unexpected error during credit delegation";
+        return { error: errorMessage };
+      }
+    },
+  });
+
+  // Action: Repay Borrowed Assets
+  useCopilotAction({
+    name: "Repay",
+    description:
+      "Repay borrowed assets to reduce or clear debt positions in Aave markets. Supports native token repay, permit signatures, and max repayment options.",
+    parameters: [
+      {
+        name: "tokenSymbol",
+        type: "string",
+        description: "Token symbol to repay (e.g., WETH, USDC, DAI)",
+        required: false,
+      },
+      {
+        name: "address",
+        type: "string",
+        description: "Token contract address (overrides symbol if provided)",
+        required: false,
+      },
+      {
+        name: "amount",
+        type: "string",
+        description: "Amount to repay. Use 'max' to repay full debt position",
+        required: true,
+      },
+      {
+        name: "userAddress",
+        type: "string",
+        description:
+          "Your wallet address (optional, defaults to connected wallet)",
+        required: false,
+      },
+      {
+        name: "useNative",
+        type: "boolean",
+        description:
+          "Repay using native token when supported (e.g., ETH for WETH debt)",
+        required: false,
+      },
+      {
+        name: "usePermit",
+        type: "boolean",
+        description:
+          "Use permit signature for gasless approval when supported (default: true)",
+        required: false,
+      },
+      {
+        name: "onBehalfOf",
+        type: "string",
+        description: "Repay debt for another address (currently not supported)",
+        required: false,
+      },
+    ],
+    handler: async ({
+      tokenSymbol,
+      address,
+      amount,
+      userAddress,
+      useNative = false,
+      usePermit = true,
+      onBehalfOf,
+    }) => {
+      try {
+        // Check for unsupported feature first
+        if (onBehalfOf) {
+          return {
+            error:
+              "Repaying on behalf of other users is currently not supported. This feature requires the ability to check another user's debt positions, which cannot be done within this action handler due to React hooks limitations.",
+          };
+        }
+
+        const targetAddress = userAddress || userAddr;
+        if (!targetAddress) {
+          return {
+            error: "No wallet connected and no user address provided",
+          };
+        }
+
+        if (!tokenSymbol && !address) {
+          return {
+            error: "Either token symbol or address is required",
+          };
+        }
+
+        if (!amount) {
+          return {
+            error: "Repay amount is required",
+          };
+        }
+
+        // Require an active wallet client for signing and sending transactions
+        if (!walletClient || !walletClient.account) {
+          return {
+            error: "Wallet client not available. Please connect your wallet.",
+          };
+        }
+
+        if (userAddress && userAddress !== userAddr) {
+          return {
+            error: "Can only execute repay for connected wallet address",
+          };
+        }
+
+        const upperSymbol = tokenSymbol?.toUpperCase();
+
+        // Find the user's borrow position for this token
+        const borrowPosition = userBorrows?.find((position) => {
+          const symbolMatch = upperSymbol
+            ? position.currency?.symbol?.toUpperCase() === upperSymbol
+            : false;
+          const addressMatch = address
+            ? position.currency?.address?.toLowerCase() ===
+              address.trim().toLowerCase()
+            : false;
+          return address ? addressMatch : symbolMatch;
+        });
+
+        if (!borrowPosition) {
+          return {
+            error: `No borrow position found for ${
+              tokenSymbol || address
+            }. You don't have any debt to repay for this asset.`,
+          };
+        }
+
+        // Find the corresponding reserve
+        const target = (allReserves || []).find((r) => {
+          const symbolMatch = upperSymbol
+            ? r?.type === "borrow" &&
+              r?.underlyingToken?.symbol?.toUpperCase?.() === upperSymbol
+            : false;
+          const addressMatch = address
+            ? r?.type === "borrow" &&
+              r?.underlyingToken?.address?.toLowerCase?.() ===
+                address.trim().toLowerCase()
+            : false;
+          return address ? addressMatch : symbolMatch;
+        });
+
+        if (!target) {
+          return {
+            error: "Borrow reserve not found for the provided symbol/address",
+          };
+        }
+
+        const targetReserve = target as Reserve;
+        const chainIdValue = targetReserve.market?.chain?.chainId;
+        const marketAddress = targetReserve.market?.address;
+        if (!chainIdValue || !marketAddress) {
+          return { error: "Missing market or chain information on reserve" };
+        }
+
+        const sender = evmAddress(targetAddress);
+        const currency = targetReserve.underlyingToken?.address as string;
+        const spender = marketAddress;
+
+        // Determine repay amount
+        let repayAmountConfig;
+        let actualRepayAmount; // For logging purposes
+        const isMaxRepay = amount.toLowerCase() === "max";
+
+        if (isMaxRepay) {
+          // Use the full debt amount for max repay
+          const debtValue = borrowPosition.debt?.amount?.value;
+          if (!debtValue || parseFloat(debtValue) <= 0) {
+            return {
+              error: "No debt to repay for this position",
+            };
+          }
+          repayAmountConfig = { max: true as const };
+          actualRepayAmount = parseFloat(debtValue);
+        } else {
+          // Validate numerical amount
+          if (isNaN(Number(amount)) || Number(amount) <= 0) {
+            return { error: "Invalid repay amount provided" };
+          }
+          repayAmountConfig = { exact: bigDecimal(Number(amount)) };
+          actualRepayAmount = Number(amount);
+        }
+
+        // Helper function to execute the repay plan
+        type RepayResultReturn = ReturnType<typeof sendTransaction>;
+        type LooseRepayPlanAndThenable = {
+          andThen: (fn: (val: unknown) => unknown) => unknown;
+        };
+        const isLooseRepayPlanAndThenable = (
+          x: unknown
+        ): x is LooseRepayPlanAndThenable =>
+          typeof (x as { andThen?: unknown })?.andThen === "function";
+
+        type RepayTransactionRequestPlan = {
+          __typename: "TransactionRequest";
+        } & Record<string, unknown>;
+        type RepayApprovalRequiredPlan = {
+          __typename: "ApprovalRequired";
+          approval: Parameters<typeof sendTransaction>[0];
+          originalTransaction: Parameters<typeof sendTransaction>[0];
+        };
+        type RepayInsufficientBalanceErrorPlan = {
+          __typename: "InsufficientBalanceError";
+          required?: { value?: unknown };
+        };
+        type RepayExecutionPlan =
+          | RepayTransactionRequestPlan
+          | RepayApprovalRequiredPlan
+          | RepayInsufficientBalanceErrorPlan;
+
+        const execRepayPlan = (
+          plan: RepayExecutionPlan
+        ): RepayResultReturn | RepayExecutionPlan => {
+          const typename = plan?.__typename;
+          switch (typename) {
+            case "TransactionRequest":
+              return sendTransaction(
+                plan as unknown as Parameters<typeof sendTransaction>[0]
+              );
+            case "ApprovalRequired":
+              return sendTransaction(
+                (plan as RepayApprovalRequiredPlan).approval
+              ).andThen(() =>
+                sendTransaction(
+                  (plan as RepayApprovalRequiredPlan).originalTransaction
+                )
+              );
+            default:
+              return plan;
+          }
+        };
+
+        const execRepayPlanForAndThen = (plan: unknown): unknown =>
+          execRepayPlan(plan as RepayExecutionPlan);
+
+        // Helper: normalize repay result into { hash } | { error }
+        const parseRepayResult = (
+          res: unknown
+        ): { hash?: unknown; error?: string } => {
+          try {
+            const typename = (res as { __typename?: string })?.__typename;
+            if (typename === "InsufficientBalanceError") {
+              const required = (res as RepayInsufficientBalanceErrorPlan)
+                ?.required?.value;
+              return {
+                error: `Insufficient balance${
+                  required ? `: requires ${String(required)}` : ""
+                }`,
+              };
+            }
+            const hasIsErr =
+              typeof (res as { isErr?: unknown }).isErr === "function";
+            if (hasIsErr) {
+              const r = res as {
+                isErr: () => boolean;
+                error?: unknown;
+                value?: unknown;
+              };
+              if (r.isErr()) {
+                const msg =
+                  r?.error instanceof Error ? r.error.message : "Repay failed";
+                return { error: msg };
+              }
+              return { hash: r.value };
+            }
+            return { hash: res };
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : "Repay failed";
+            return { error: msg };
+          }
+        };
+
+        // Native repay path if supported and requested
+        if (useNative && targetReserve.acceptsNative) {
+          const initial = repay({
+            market: marketAddress,
+            amount: { native: repayAmountConfig },
+            sender,
+            chainId: chainIdValue,
+          });
+          const executed = isLooseRepayPlanAndThenable(initial)
+            ? await (initial as LooseRepayPlanAndThenable).andThen(
+                execRepayPlanForAndThen
+              )
+            : execRepayPlan(initial as RepayExecutionPlan);
+          const out = parseRepayResult(executed);
+
+          if (out.error) {
+            return { error: out.error };
+          }
+
+          // Log successful repay
+          const tokenSym =
+            targetReserve.underlyingToken?.symbol || tokenSymbol || "";
+          const price = await getTokenUsdPrice(tokenSym);
+          const createdAt = new Date().toISOString();
+
+          safeLog({
+            address: targetAddress,
+            agent: "Aave",
+            action: "Repay",
+            volume: actualRepayAmount || 0,
+            token: tokenSym,
+            volumeUsd: (actualRepayAmount || 0) * (price || 0),
+            extra: {
+              branch: "native",
+              chainId: chainIdValue,
+              market: marketAddress,
+              txHash: out.hash,
+              isMaxRepay,
+              createdAt,
+            },
+          });
+
+          return {
+            success: true,
+            txHash: out.hash,
+            amount: isMaxRepay ? "max" : amount,
+            actualAmount: actualRepayAmount,
+            token: tokenSym,
+            method: "native",
+            isMaxRepay,
+            message: `Successfully repaid ${
+              isMaxRepay ? "max debt" : `${amount}`
+            } ${tokenSym}`,
+          };
+        }
+
+        // Permit repay path if supported and requested
+        if (usePermit && targetReserve.permitSupported) {
+          // For permit, we need the exact amount, not max
+          const permitAmount = isMaxRepay
+            ? bigDecimal(actualRepayAmount)
+            : repayAmountConfig.exact;
+
+          const signed = signPermit({
+            amount: permitAmount,
+            chainId: chainIdValue,
+            currency,
+            owner: sender,
+            spender,
+          });
+
+          if (isLooseRepayPlanAndThenable(signed)) {
+            const withRepay = await (
+              signed as LooseRepayPlanAndThenable
+            ).andThen((signature: unknown) =>
+              repay({
+                market: marketAddress,
+                amount: {
+                  erc20: {
+                    currency,
+                    value: repayAmountConfig,
+                    permitSig: signature as never,
+                  },
+                },
+                sender,
+                chainId: chainIdValue,
+              })
+            );
+            const executed = isLooseRepayPlanAndThenable(withRepay)
+              ? await (withRepay as LooseRepayPlanAndThenable).andThen(
+                  execRepayPlanForAndThen
+                )
+              : execRepayPlan(withRepay as RepayExecutionPlan);
+            const out = parseRepayResult(executed);
+
+            if (out.error) {
+              return { error: out.error };
+            }
+
+            // Log successful repay
+            const tokenSym =
+              targetReserve.underlyingToken?.symbol || tokenSymbol || "";
+            const price = await getTokenUsdPrice(tokenSym);
+            const createdAt = new Date().toISOString();
+
+            safeLog({
+              address: targetAddress,
+              agent: "Aave",
+              action: "Repay",
+              volume: actualRepayAmount || 0,
+              token: tokenSym,
+              volumeUsd: (actualRepayAmount || 0) * (price || 0),
+              extra: {
+                branch: "permit",
+                chainId: chainIdValue,
+                market: marketAddress,
+                txHash: out.hash,
+                isMaxRepay,
+                createdAt,
+              },
+            });
+
+            return {
+              success: true,
+              txHash: out.hash,
+              amount: isMaxRepay ? "max" : amount,
+              actualAmount: actualRepayAmount,
+              token: tokenSym,
+              method: "permit",
+              isMaxRepay,
+              message: `Successfully repaid ${
+                isMaxRepay ? "max debt" : `${amount}`
+              } ${tokenSym} (with permit)`,
+            };
+          }
+
+          const out = parseRepayResult(signed);
+          if (out.error) {
+            return { error: out.error };
+          }
+
+          // If we get here, permit signing worked but didn't use andThen
+          return {
+            success: true,
+            txHash: out.hash,
+            method: "permit",
+            message: "Repay permit signed successfully",
+          };
+        }
+
+        // Standard ERC-20 repay (approval flow handled by plan)
+        const plan = repay({
+          market: marketAddress,
+          amount: {
+            erc20: {
+              currency,
+              value: repayAmountConfig,
+            },
+          },
+          sender,
+          chainId: chainIdValue,
+        });
+        const executed = isLooseRepayPlanAndThenable(plan)
+          ? await (plan as LooseRepayPlanAndThenable).andThen(
+              execRepayPlanForAndThen
+            )
+          : execRepayPlan(plan as RepayExecutionPlan);
+        const out = parseRepayResult(executed);
+
+        if (out.error) {
+          return { error: out.error };
+        }
+
+        // Log successful repay
+        const tokenSym =
+          targetReserve.underlyingToken?.symbol || tokenSymbol || "";
+        const price = await getTokenUsdPrice(tokenSym);
+        const createdAt = new Date().toISOString();
+
+        safeLog({
+          address: targetAddress,
+          agent: "Aave",
+          action: "Repay",
+          volume: actualRepayAmount || 0,
+          token: tokenSym,
+          volumeUsd: (actualRepayAmount || 0) * (price || 0),
+          extra: {
+            branch: "erc20",
+            chainId: chainIdValue,
+            market: marketAddress,
+            txHash: out.hash,
+            isMaxRepay,
+            createdAt,
+          },
+        });
+
+        return {
+          success: true,
+          txHash: out.hash,
+          amount: isMaxRepay ? "max" : amount,
+          actualAmount: actualRepayAmount,
+          token: tokenSym,
+          method: "erc20",
+          isMaxRepay,
+          message: `Successfully repaid ${
+            isMaxRepay ? "max debt" : `${amount}`
+          } ${tokenSym}`,
+        };
+      } catch (e: unknown) {
+        const errorMessage =
+          e instanceof Error
+            ? e.message
+            : "Unexpected error during repay operation";
+        return { error: errorMessage };
+      }
+    },
+  });
+
   // Extracted function to execute a supply transaction so it can be tested directly
   type ExecuteSupplyParams = {
     symbol?: string;
@@ -1401,7 +2064,7 @@ const Aave = () => {
     console.log(userSupplies, "user supplies");
     console.log(userBorrows, "user borrows");
     console.log(
-      `Loading states - Supplies: ${loading}, Borrows: ${borrowsLoading}, Collateral Toggle: ${toggling.loading}, Borrowing: ${borrowing.loading}`
+      `Loading states - Supplies: ${loading}, Borrows: ${borrowsLoading}, Collateral Toggle: ${toggling.loading}, Borrowing: ${borrowing.loading}, Repaying: ${repaying.loading}, Credit Delegation: ${approvingDelegation.loading}`
     );
   };
 

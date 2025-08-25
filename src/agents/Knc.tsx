@@ -916,14 +916,26 @@ const Knc = () => {
         // Show loading state during execution
         return (
           <div className="bg-[#1A1A1A] border border-[#A9A0FF]/20 rounded-[20px] p-6 max-w-md w-full mx-4">
-            <div className="flex items-center justify-center gap-3 text-[#A9A0FF]">
+            <div className="flex items-center justify-center gap-3 text-[#A9A0FF] mb-4">
               <div className="w-4 h-4 border-2 border-[#A9A0FF] border-t-transparent rounded-full animate-spin"></div>
               <div className="text-white font-medium">Executing Swap...</div>
             </div>
-            <div className="text-gray-400 text-sm text-center mt-2">
+            <div className="text-gray-400 text-sm text-center mb-4">
               Processing {amount} {tokenInSymbol} → {tokenOutSymbol} on{" "}
               {platform}
             </div>
+            <button
+              onClick={() => {
+                if (respond) {
+                  (respond as (message: string) => void)(
+                    "🚫 Swap cancelled by user"
+                  );
+                }
+              }}
+              className="w-full bg-red-500 hover:bg-red-600 text-white py-2 rounded-lg transition-colors"
+            >
+              Cancel
+            </button>
           </div>
         );
       }
